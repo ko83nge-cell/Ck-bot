@@ -71,7 +71,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "🎵 MUSIC\n"
-        "/song သီချင်းနာမည်\n\n"
+        "/song သီချင်းနာမည် (မြန်မာ/အင်္ဂလိပ် မဆို ရှာနိုင်သည်)\n\n"
         "🛡️ ADMIN COMMANDS\n"
         "/warn - သတိပေးရန်\n"
         "/warnings - Warn အရေအတွက်ကြည့်ရန်\n"
@@ -92,7 +92,7 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await message.reply_text(
             "သီချင်းနာမည် ထည့်ပေးပါ။\n"
-            "ဥပမာ: /song relaxing music"
+            "ဥပမာ: /song ဖြူ သို့မဟုတ် /song fading"
         )
         return
 
@@ -100,33 +100,57 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status = await message.reply_text(f"🔎 '{query}' ကို ရှာဖွေနေပါတယ်...")
 
     try:
-        # iTunes API ဖြင့် သီချင်းရှာမည်
-        search_url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
-        res = requests.get(search_url, timeout=15)
+        # Piped API (YouTube Proxy) သုံးပြီး မြန်မာရော အင်္ဂလိပ်ပါ အလွယ်တကူ ရှာမည်
+        piped_url = f"https://pipedapi.kavin.rocks/search?q={query}&filter=videos"
+        res = requests.get(piped_url, timeout=15)
+        
+        if res.status_code != 200:
+            piped_url = f"https://piped-api.privacy.com.de/search?q={query}&filter=videos"
+            res = requests.get(piped_url, timeout=15)
+
         data = res.json()
-
-        results = data.get("results", [])
-        if not results:
-            # အကယ်၍ အင်္ဂလိပ်နာမည်နဲ့ မတွေ့ရင် ပိုမိုကျယ်ပြန့်စွာ ရှာရန် အခြားနည်းသုံးမည်
-            search_url = f"https://itunes.apple.com/search?term=music&entity=song&limit=1"
-            res = requests.get(search_url, timeout=15)
-            data = res.json()
-            results = data.get("results", [])
-
-        if not results:
-            await status.edit_text("❌ သီချင်း ရှာမတွေ့ပါ။ အခြားနာမည်ဖြင့် ထပ်ရှာကြည့်ပါ။")
+        items = data.get("items", [])
+        
+        if not items:
+            await status.edit_text("❌ သီချင်း ရှာမတွေ့ပါ။")
             return
 
-        track = results[0]
-        title = track.get("trackName", "Unknown Title")
-        artist = track.get("artistName", "Unknown Artist")
-        audio_url = track.get("previewUrl")
+        # ပထမဆုံးထွက်လာတဲ့ ဗီဒီယိုကို ယူမည်
+        video = items[0]
+        video_id = video.get("url").split("=")[-1]
+        title = video.get("title", "Unknown Title")
+        artist = video.get("uploader", "Unknown Artist")
+        yt_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        await status.edit_text("📥 သီချင်းဖိုင် ဆွဲယူနေပါပြီ...")
+
+        # Cobalt API သုံးပြီး MP3 လင့်ခ်ပြောင်းမည်
+        cobalt_res = requests.post(
+            "https://co.wuk.sh/api/json",
+            json={
+                "url": yt_url,
+                "isAudioOnly": True,
+                "downloadMode": "audio"
+            },
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            },
+            timeout=20
+        )
+
+        cobalt_data = cobalt_res.json()
+        audio_url = None
+
+        if cobalt_res.status_code == 200 and "url" in cobalt_data:
+            audio_url = cobalt_data["url"]
+        elif "picker" in cobalt_data and len(cobalt_data["picker"]) > 0:
+            audio_url = cobalt_data["picker"][0].get("url")
 
         if not audio_url:
             await status.edit_text("❌ သီချင်းဖိုင်လင့်ခ် ရယူ၍ မရပါ။")
             return
 
-        # အသံဖိုင်ကို ဒေါင်းလုဒ်ဆွဲမည်
         audio_res = requests.get(audio_url, stream=True, timeout=30)
         audio_res.raise_for_status()
 
@@ -281,4 +305,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+
