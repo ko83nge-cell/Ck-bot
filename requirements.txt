@@ -1,4 +1,4 @@
 python-telegram-bot>=20.0
 requests
-yt-dlp[default]
+yt-dlp>=2026.8.19
 
