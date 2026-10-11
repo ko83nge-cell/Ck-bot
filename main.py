@@ -1,7 +1,7 @@
-import logging
 import os
-import tempfile
+import sqlite3
 from telegram import Update
+from telegram.ContextTypes import ContextTypes
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -9,208 +9,135 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-import yt_dlp
 
-# Logging သတ်မှတ်ရန်
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+TOKEN = os.getenv("BOT_TOKEN")
+# Admin တွေရဲ့ Telegram User ID များကို ကော်မာ (,) ခံ၍ ထည့်နိုင်သည် (ဥပမာ: "123456789,987654321")
+ADMIN_IDS = [
+    int(uid.strip())
+    for uid in os.getenv("ADMIN_IDS", "0").split(",")
+    if uid.strip()
+]
 
-# Bot Token ကို Environment Variable (သို့) တိုက်ရိုက်ထည့်ပါ
-TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
+# SQLite Database ချိတ်ဆက်ခြင်း (ရုပ်ရှင်အချက်အလက်များနှင့် file_id များ သိမ်းရန်)
+conn = sqlite3.connect("movies_bot.db", check_same_thread=False)
+cursor = conn.cursor()
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS movies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        file_id TEXT,
+        caption TEXT
+    )
+""")
+conn.commit()
 
 
-# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_name = update.effective_user.first_name
-    welcome_text = (
-        f"မင်္ဂလာပါ 👋 **{user_name}**၊ Ck_helpbot မှ ကြိုဆိုပါတယ်။\n\n"
-        f"🎵 သီချင်းရှာရန်\n`/song` သီချင်းအမည်\n\n"
-        f"/help - အကူအညီကြည့်ရန်"
+  await update.message.reply_text(
+      "🎬 **Auto Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
+      "🔍 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပြီး ပို့လိုက်ပါ။ (ဥပမာ - `Avatar`)\n"
+      "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို ပို့ပါ။ Caption တွင် ရုပ်ရှင်နာမည်ကို ထည့်ပေးပါ။",
+      parse_mode="Markdown",
+  )
+
+
+# Admin မှ ဗီဒီယို/ဖိုင် ပို့လိုက်လျှင် Database ထဲ အလိုအလျောက် သိမ်းရန်
+async def save_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  user_id = update.effective_user.id
+  if ADMIN_IDS and user_id not in ADMIN_IDS:
+    await update.message.reply_text(
+        "⚠️ ဤဘော့ထဲသို့ ဖိုင်များ တိုက်ရိုက်တင်ခွင့်ကို Admin များသာ ပြုလုပ်နိုင်ပါသည်။"
     )
-    await update.message.reply_text(welcome_text, parse_mode="Markdown")
+    return
 
+  message = update.message
+  file_id = None
+  title = ""
 
-# /help command
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = (
-        "📚 **Ck_helpbot Commands**\n\n"
-        "🎵 **အသုံးပြုသူများ:**\n"
-        "/start - Bot စတင်ရန်\n"
-        "/help - အကူအညီ\n"
-        "/song သီချင်းအမည် - သီချင်းရှာရန်\n\n"
-        "🛡️ **Group Admin Commands:**\n"
-        "/warn - Reply လုပ်ထားသူကို Warning ပေးရန်\n"
-        "/warnings - Warning ကြည့်ရန်\n"
-        "/ban - Reply လုပ်ထားသူကို Ban လုပ်ရန်\n"
-        "/unban USER_ID - Unban လုပ်ရန်\n"
-        "/mute - Reply လုပ်ထားသူကို Mute လုပ်ရန်\n"
-        "/unmute - Unmute လုပ်ရန်"
+  if message.video:
+    file_id = message.video.file_id
+    title = message.caption or message.video.file_name or "Untitled Movie"
+  elif message.document:
+    file_id = message.document.file_id
+    title = message.caption or message.document.file_name or "Untitled Movie"
+
+  if file_id:
+    # Database ထဲသို့ သိမ်းဆည်းမည်
+    cursor.execute(
+        "INSERT INTO movies (title, file_id, caption) VALUES (?, ?, ?)",
+        (title.lower(), file_id, title),
     )
-    await update.message.reply_text(help_text, parse_mode="Markdown")
+    conn.commit()
+    await message.reply_text(
+        f"✅ အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ!\n📌 **နာမည်:** {title}"
+    )
+  else:
+    await message.reply_text(
+        "⚠️ ကျေးဇူးပြု၍ ရုပ်ရှင် Video သို့မဟုတ် Document ဖိုင်ကို ပို့ပေးပါ။"
+    )
 
 
-# /song command (yt-dlp ဖြင့် သီချင်းဒေါင်းပြီး ပို့ပေးရန်)
-async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args:
-        await update.message.reply_text(
-            "ကျေးဇူးပြု၍ သီချင်းအမည် ထည့်ပါဝင်ပါ။ ဥပမာ: `/song Shape of You`",
+# User များမှ စာသားဖြင့် ရှာဖွေသည့်အခါ Chat ထဲသို့ တိုက်ရိုက် ဗီဒီယို ပို့ပေးရန်
+async def search_and_send_movie(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+):
+  query = update.message.text.strip().lower()
+
+  # / နဲ့စတဲ့ Command များကို ကျော်သွားရန်
+  if query.startswith("/"):
+    return
+
+  cursor.execute(
+      "SELECT title, file_id, caption FROM movies WHERE LOWER(title) LIKE ?",
+      (f"%{query}%",),
+  )
+  results = cursor.fetchall()
+
+  if not results:
+    await update.message.reply_text(
+        "❌ တောင်းပန်ပါတယ်၊ အဆိုပါ နာမည်နဲ့ ရုပ်ရှင်ကို ရှာမတွေ့ပါ။ နာမည်အမှန် (သို့) အတိုကောက်ဖြင့် ထပ်မံရှာကြည့်ပါ။"
+    )
+    return
+
+  # တွေ့ရှိသော ရုပ်ရှင်များကို Chat ထဲသို့ ပို့ပေးမည် (အများဆုံး ၅ ခု)
+  for title, file_id, caption in results[:5]:
+    try:
+      await update.message.reply_video(
+          video=file_id,
+          caption=f"🎥 **{caption}**\n🤖 Bot ဖြင့် ရှာဖွေပေးထားပါသည်။",
+          parse_mode="Markdown",
+      )
+    except Exception:
+      # Video အဖြစ် ပို့မရပါက Document အဖြစ် ပို့မည်
+      try:
+        await update.message.reply_document(
+            document=file_id,
+            caption=f"🎥 **{caption}**\n🤖 Bot ဖြင့် ရှာဖွေပေးထားပါသည်။",
             parse_mode="Markdown",
         )
-        return
-
-    query = " ".join(context.args)
-    msg = await update.message.reply_text(
-        f"🔎 `{query}` ကို ရှာဖွေနေပါပြီ ခဏစောင့်ပါ..."
-    )
-
-    try:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            ydl_opts = {
-                "format": "bestaudio/best",
-                "default_search": "ytsearch1",
-                "outtmpl": os.path.join(temp_dir, "%(title)s.%(ext)s"),
-                "postprocessors": [
-                    {
-                        "key": "FFmpegExtractAudio",
-                        "preferredcodec": "mp3",
-                        "preferredquality": "192",
-                    }
-                ],
-                "quiet": True,
-            }
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(
-                    f"ytsearch:{query}", download=True
-                )
-                if "entries" in info:
-                    info = info["entries"][0]
-
-                filename = ydl.prepare_filename(info)
-                audio_file = os.path.splitext(filename)[0] + ".mp3"
-                title = info.get("title", "Audio")
-
-            await msg.edit_text("📤 သီချင်းဖိုင် ပို့ဆောင်နေပါပြီ...")
-            with open(audio_file, "rb") as f:
-                await update.message.reply_audio(
-                    audio=f,
-                    title=title,
-                    performer="Ck_helpbot",
-                )
-            await msg.delete()
-
-    except Exception as e:
-        logger.error(f"Error downloading song: {e}")
-        await msg.edit_text(
-            "❌ သီချင်းရှာဖွေရာတွင် အမှားအယွင်းရှိသွားပါသည်။ ထပ်မံကြိုးစားကြည့်ပါ။"
-        )
-
-
-# Admin Check Helper
-async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    if update.effective_chat.type == "private":
-        return True  # Private chat ဖြစ်ရင် ခွင့်ပြုမည်
-    user_id = update.effective_user.id
-    member = await context.bot.get_chat_member(
-        update.effective_chat.id, user_id
-    )
-    return member.status in ["administrator", "creator"]
-
-
-# /warn command
-async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context):
-        await update.message.reply_text(
-            "⚠️ ဤ විධාန်ကို Admin များသာ အသုံးပြုနိုင်ပါသည်။"
-        )
-        return
-
-    if not update.message.reply_to_message:
-        await update.message.reply_text(
-            "⚠️ Warning ပေးလိုသူ၏ မက်ဆေ့ချ်ကို Reply လုပ်၍ အသုံးပြုပါ။"
-        )
-        return
-
-    target_user = update.message.reply_to_message.from_user
-    await update.message.reply_text(
-        f"⚠️ {target_user.mention_html()} ကို Warning ပေးလိုက်ပါပြီ။",
-        parse_mode="HTML",
-    )
-
-
-# /ban command
-async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context):
-        await update.message.reply_text("⚠️ Admin များသာ အသုံးပြုနိုင်ပါသည်။")
-        return
-
-    if not update.message.reply_to_message:
-        await update.message.reply_text(
-            "⚠️ Ban လိုသူ၏ မက်ဆေ့ချ်ကို Reply လုပ်ပါ။"
-        )
-        return
-
-    target_user = update.message.reply_to_message.from_user
-    try:
-        await context.bot.ban_chat_member(
-            update.effective_chat.id, target_user.id
-        )
-        await update.message.reply_text(
-            f"🚫 {target_user.mention_html()} ကို Group မှ Ban လိုက်ပါပြီ။",
-            parse_mode="HTML",
-        )
-    except Exception as e:
-        await update.message.reply_text(f"❌ အမှားဖြစ်ပွားသည်: {e}")
-
-
-# /mute command
-async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await is_admin(update, context):
-        await update.message.reply_text("⚠️ Admin များသာ အသုံးပြုနိုင်ပါသည်။")
-        return
-
-    if not update.message.reply_to_message:
-        await update.message.reply_text(
-            "⚠️ Mute လုပ်လိုသူ၏ မက်ဆေ့ချ်ကို Reply လုပ်ပါ။"
-        )
-        return
-
-    target_user = update.message.reply_to_message.from_user
-    try:
-        from telegram import ChatPermissions
-
-        await context.bot.restrict_chat_member(
-            chat_id=update.effective_chat.id,
-            user_id=target_user.id,
-            permissions=ChatPermissions(can_send_messages=False),
-        )
-        await update.message.reply_text(
-            f"🔇 {target_user.mention_html()} ကို Mute လုပ်လိုက်ပါပြီ။",
-            parse_mode="HTML",
-        )
-    except Exception as e:
-        await update.message.reply_text(f"❌ အမှားဖြစ်ပွားသည်: {e}")
+      except Exception as e:
+        print(f"Error sending file: {e}")
 
 
 def main():
-    # Application တည်ဆောက်ရန်
-    application = Application.builder().token(TOKEN).build()
+  if not TOKEN:
+    print("Error: BOT_TOKEN not set!")
+    return
 
-    # Handlers များ ထည့်သွင်းရန်
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("song", song))
-    application.add_handler(CommandHandler("warn", warn))
-    application.add_handler(CommandHandler("ban", ban))
-    application.add_handler(CommandHandler("mute", mute))
+  app = Application.builder().token(TOKEN).build()
 
-    # Bot ကို စတင်လည်ပတ်ရန် (Polling)
-    print("Bot is running...")
-    application.run_polling()
+  # Handlers များ
+  app.add_handler(CommandHandler("start", start))
+  app.add_handler(
+      MessageHandler(filters.VIDEO | filters.Document.ALL, save_movie)
+  )
+  app.add_handler(
+      MessageHandler(filters.TEXT & ~filters.COMMAND, search_and_send_movie)
+  )
+
+  print("Auto Movie Bot is running...")
+  app.run_polling()
 
 
 if __name__ == "__main__":
-    main()
+  main()
