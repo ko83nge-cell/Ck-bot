@@ -13,7 +13,7 @@ from telegram.ext import (
 # SETTINGS
 # =========================
 
-BOT_TOKEN = "8824850208:AAGkmULcNJxWx-39-80r-8oJNtSc9g3bSTM"
+BOT_TOKEN = "8824850208:AAExGzmfMD8Kn0I9fHtYRHAXU8FtjBH2m78"
 OWNER_ID = 8062359539
 
 logging.basicConfig(level=logging.INFO)
@@ -63,7 +63,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "မင်္ဂလာပါ! 🤖\n\n"
         "Music & Group Management Bot ပါ။\n\n"
-        "/song - သီချင်း နားဆင်ရန်\n"
+        "/song သီချင်းနာမည် - သီချင်းရှာရန်\n"
         "/help - Command အားလုံးကြည့်ရန်"
     )
 
@@ -71,7 +71,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "🎵 MUSIC\n"
-        "/song\n\n"
+        "/song သီချင်းနာမည်\n\n"
         "🛡️ ADMIN COMMANDS\n"
         "/warn - သတိပေးရန်\n"
         "/warnings - Warn အရေအတွက်ကြည့်ရန်\n"
@@ -83,18 +83,41 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================
-# MUSIC (STABLE DIRECT STREAM)
+# MUSIC SEARCH & DOWNLOAD
 # =========================
 
 async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
-    status = await message.reply_text("🔎 သီချင်းဖိုင် ဆွဲယူနေပါပြီ...")
+
+    if not context.args:
+        await message.reply_text(
+            "သီချင်းနာမည် ထည့်ပေးပါ။\n"
+            "ဥပမာ: /song fading"
+        )
+        return
+
+    query = " ".join(context.args)
+    status = await message.reply_text(f"🔎 '{query}' ကို ရှာဖွေနေပါတယ်...")
 
     try:
-        # လုံးဝ Error မတက်မယ့် တည်ငြိမ်တဲ့ Audio URL
-        audio_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-        title = "Relaxing Melody"
-        artist = "Bot Music"
+        # iTunes API ဖြင့် သီချင်းရှာမည်
+        search_url = f"https://itunes.apple.com/search?term={requests.utils.quote(query)}&entity=song&limit=1"
+        res = requests.get(search_url, timeout=15)
+        data = res.json()
+
+        results = data.get("results", [])
+        if not results:
+            await status.edit_text("❌ သီချင်း ရှာမတွေ့ပါ။ အခြားနာမည်ဖြင့် ထပ်ရှာကြည့်ပါ။")
+            return
+
+        track = results[0]
+        title = track.get("trackName", "Unknown Title")
+        artist = track.get("artistName", "Unknown Artist")
+        audio_url = track.get("previewUrl")
+
+        if not audio_url:
+            await status.edit_text("❌ သီချင်းဖိုင်လင့်ခ် ရယူ၍ မရပါ။")
+            return
 
         audio_res = requests.get(audio_url, stream=True, timeout=30)
         audio_res.raise_for_status()
@@ -119,7 +142,7 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await status.delete()
 
     except Exception as e:
-        logger.exception("Song send failed")
+        logger.exception("Song download failed")
         await status.edit_text("❌ Error: သီချင်းရယူရာတွင် အခက်အခဲရှိနေပါသည်။")
 
 
@@ -190,7 +213,7 @@ async def mute(update, context):
             user_id=target.id,
             permissions=ChatPermissions(can_send_messages=False),
         )
-        await update.effective_message.reply_text(f"🔇 {target.full_name} ကို မုဒ်လုပ်ပြီးပါပြီ။")
+        await update.effective_message.reply_text(f"🔇 {target.full_name} ကို Mute လုပ်ပြီးပါပြီ။")
     except Exception:
         await update.effective_message.reply_text("Mute မအောင်မြင်ပါ။")
 
