@@ -1,7 +1,6 @@
 import os
 import telebot
 import urllib.parse
-import requests
 
 TOKEN = "8824850208:AAGkmULcNJxWx-39-80r-8oJNtSc9g3bSTM"
 OWNER_ID = 8062359539
@@ -41,7 +40,7 @@ def broadcast_ads(message):
   success_count = 0
   for group_id in list(joined_groups):
     try:
-      bot.send_message(group_id, f"📢 **ကြော်ငြာ**\n\n{text_to_broadcast}", parse_mode="Markdown")
+      bot.send_message(group_id, f"📢 ကြော်ငြာ\n\n{text_to_broadcast}")
       success_count += 1
     except Exception as e:
       joined_groups.discard(group_id)
@@ -49,7 +48,7 @@ def broadcast_ads(message):
   bot.reply_to(message, f"✅ ကြော်ငြာကို Group {success_count} ခုသို့ အောင်မြင်စွာ ပို့ပြီးပါပြီ။")
 
 
-# သီချင်းရှာဖွေခြင်း (Error ကင်းရှင်းစေရန် API Search သုံးမည်)
+# သီချင်းရှာဖွေခြင်း (Markdown အမှားမပါတော့ရန် ပြင်ဆင်ထားသည်)
 @bot.message_handler(commands=["song"])
 def search_song(message):
   song_name = message.text.replace("/song", "").strip()
@@ -60,21 +59,16 @@ def search_song(message):
   processing_msg = bot.reply_to(message, f"🔍 '{song_name}' ကို ရှာဖွေနေပါပြီ...")
 
   try:
-    # YouTube Search Query ပြုလုပ်ခြင်း
     query_encoded = urllib.parse.quote(song_name)
     search_url = f"https://www.youtube.com/results?search_query={query_encoded}"
 
-    # တွေ့ရှိသော သီချင်းအချက်အလက်ဖြင့် Link ပို့ပေးခြင်း (Bot Protection ကျော်ရန်)
     response_text = (
-        f"🎵 **{song_name}** အတွက် ရှာဖွေတွေ့ရှိချက်:\n\n"
-        f"👉 YouTube တွင် တိုက်ရိုက်နားဆင်ရန် ဤနေရာကို နှိပ်ပါ:\n{search_url}"
+        f"🎵 သီချင်းရှာဖွေတွေ့ရှိချက်: {song_name}\n\n"
+        f"YouTube တွင် နားဆင်ရန် ဤလင့်ခ်ကို နှိပ်ပါ:\n{search_url}"
     )
 
     bot.edit_message_text(
-        response_text,
-        message.chat.id,
-        processing_msg.message_id,
-        parse_mode="Markdown",
+        response_text, message.chat.id, processing_msg.message_id
     )
 
   except Exception as e:
