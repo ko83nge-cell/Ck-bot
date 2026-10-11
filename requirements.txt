@@ -1,4 +1,4 @@
-python-te
+
 python-telegram-bot>=20.0,<23.0
 requests
 yt-dlp[default]
