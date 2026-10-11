@@ -8,11 +8,13 @@ import httpx
 from telegram import Update, ChatPermissions
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# Configure these in your hosting provider's Environment Variables / Secrets.
-BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-OWNER_ID = int(os.getenv("OWNER_ID", "0") or "0")  # Optional; reserved for future owner-only commands.
+# =========================
+# SETTINGS
+# =========================
 
-# Optional custom direct MP3 URL. Default is a public sample audio, not a music search engine.
+BOT_TOKEN = "8824850208:AAExGzmfMD8Kn0I9fHtYRHAXU8FtjBH2m78"
+OWNER_ID = 8062359539
+
 SONG_URL = os.getenv(
     "SONG_URL",
     "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
@@ -108,7 +110,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "မင်္ဂလာပါ! 🤖\n\n"
         "Music & Group Management Bot ပါ။\n\n"
-        "/song - Sample သီချင်းဖိုင် ပို့ရန်\n"
+        "/song - သီချင်းဖိုင် ပို့ရန်\n"
         "/help - Command အားလုံးကြည့်ရန်"
     )
 
@@ -116,7 +118,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "🎵 MUSIC\n"
-        "/song - Sample audio ပို့ရန်\n\n"
+        "/song - သီချင်း ပို့ရန်\n\n"
         "🛡️ ADMIN COMMANDS (Group ထဲတွင် target message ကို Reply လုပ်ပါ)\n"
         "/warn - သတိပေးရန်\n"
         "/warnings - Warn အရေအတွက်ကြည့်ရန်\n"
@@ -146,7 +148,6 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if not data:
             raise RuntimeError("Audio URL returned an empty response")
-        # Telegram Bot API has a 50 MB upload limit for sendAudio in common deployments.
         if len(data) > 49 * 1024 * 1024:
             raise RuntimeError("Audio file is too large to upload")
 
@@ -299,11 +300,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     if not BOT_TOKEN:
-        raise RuntimeError(
-            "BOT_TOKEN မသတ်မှတ်ရသေးပါ။ Hosting Variables/Secrets ထဲမှာ BOT_TOKEN ထည့်ပါ။"
-        )
-    if not SONG_URL.startswith(("https://", "http://")):
-        raise RuntimeError("SONG_URL သည် http:// သို့မဟုတ် https:// URL ဖြစ်ရပါမည်။")
+        raise RuntimeError("BOT_TOKEN မသတ်မှတ်ရသေးပါ။")
 
     init_db()
     app = Application.builder().token(BOT_TOKEN).build()
@@ -324,3 +321,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
