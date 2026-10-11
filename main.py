@@ -48,7 +48,7 @@ def broadcast_ads(message):
   bot.reply_to(message, f"✅ ကြော်ငြာကို Group {success_count} ခုသို့ အောင်မြင်စွာ ပို့ပြီးပါပြီ။")
 
 
-# သီချင်းရှာဖွေပြီး Audio ဖိုင်အစစ် တိုက်ရိုက်ပို့ရန်
+# သီချင်းရှာဖွေခြင်း (Error ကင်းရှင်းစေရန် ytsearch သုံးမည်)
 @bot.message_handler(commands=["song"])
 def send_audio_song(message):
   song_name = message.text.replace("/song", "").strip()
@@ -56,24 +56,22 @@ def send_audio_song(message):
     bot.reply_to(message, "⚠️ ကျေးဇူးပြု၍ ရှာလိုသည့် သီချင်းနာမည် ထည့်ပါ (ဥပမာ: /song My Way)")
     return
 
-  processing_msg = bot.reply_to(message, f"🔍 '{song_name}' ကို ရှာဖွေပြီး အသံဖိုင် ဆွဲထုတ်နေပါပြီ...")
+  processing_msg = bot.reply_to(message, f"🔍 '{song_name}' ကို ရှာဖွေနေပါပြီ...")
   audio_file = None
 
   try:
-    # yt-dlp ဖြင့် အသံဖိုင်ကို တိုက်ရိုက်ဒေါင်းလုပ်ဆွဲရန်
+    # yt-dlp ဖြင့် Free Audio ရှာဖွေရန် Options များ
     ydl_opts = {
-        "format": "bestaudio",
+        "format": "bestaudio/best",
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
-            "preferredquality": "192",
+            "preferredquality": "128",
         }],
-        "outtmpl": "downloaded_song",
+        "outtmpl": "song_cache",
         "default_search": "ytsearch1",
         "noplaylist": True,
-        "geo_bypass": True,
-        "quiet": True,
-        "no_warnings": True,
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -81,9 +79,9 @@ def send_audio_song(message):
       if "entries" in info:
         info = info["entries"][0]
       title = info.get("title", song_name)
-      audio_file = "downloaded_song.mp3"
+      audio_file = "song_cache.mp3"
 
-    # Telegram သို့ Audio ဖိုင်အစစ် တိုက်ရိုက်ပို့ခြင်း
+    # Telegram သို့ အသံဖိုင် ပို့ခြင်း
     with open(audio_file, "rb") as audio:
       bot.send_audio(
           message.chat.id,
@@ -97,7 +95,8 @@ def send_audio_song(message):
 
   except Exception as e:
     bot.edit_message_text(
-        f"❌ သီချင်းဒေါင်းလုပ်လုပ်ရာတွင် အမှားဖြစ်ပွားပါသည် (သို့မဟုတ် YouTube မှ တားမြစ်ထားပါသည်)။",
+        f"❌ သီချင်းရယူရာတွင် အခက်အခဲရှိနေပါသည် (YouTube Bot Protection)။"
+        f" ကျေးဇူးပြု၍ ခဏနေမှ ထပ်ကြိုးစားပါ။",
         message.chat.id,
         processing_msg.message_id,
     )
@@ -133,4 +132,4 @@ def ban_user(message):
 
 print("Bot is running...")
 bot.infinity_polling()
-      
+  
