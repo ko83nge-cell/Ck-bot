@@ -48,42 +48,42 @@ def broadcast_ads(message):
   bot.reply_to(message, f"✅ ကြော်ငြာကို Group {success_count} ခုသို့ အောင်မြင်စွာ ပို့ပြီးပါပြီ။")
 
 
-# YouTube မှ သီချင်းရှာဖွေပြီး အသံဖိုင် (Audio) ပို့ပေးရန်
+# သီချင်းရှာဖွေပြီး Audio ဖိုင်အစစ် တိုက်ရိုက်ပို့ရန်
 @bot.message_handler(commands=["song"])
-def download_and_send_song(message):
+def send_audio_song(message):
   song_name = message.text.replace("/song", "").strip()
   if not song_name:
     bot.reply_to(message, "⚠️ ကျေးဇူးပြု၍ ရှာလိုသည့် သီချင်းနာမည် ထည့်ပါ (ဥပမာ: /song My Way)")
     return
 
-  processing_msg = bot.reply_to(
-      message, f"🔍 '{song_name}' ကို ရှာဖွေပြီး ဒေါင်းလုပ်လုပ်နေပါပြီ..."
-  )
-
+  processing_msg = bot.reply_to(message, f"🔍 '{song_name}' ကို ရှာဖွေပြီး အသံဖိုင် ဆွဲထုတ်နေပါပြီ...")
   audio_file = None
+
   try:
-    # yt-dlp ဖြင့် YouTube မှ အသံဖိုင်ကို ရှာဖွေ ಡေါင်းလုပ်ဆွဲခြင်း
+    # yt-dlp ဖြင့် အသံဖိုင်ကို တိုက်ရိုက်ဒေါင်းလုပ်ဆွဲရန်
     ydl_opts = {
-        "format": "bestaudio/best",
+        "format": "bestaudio",
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
             "preferredquality": "192",
         }],
-        "outtmpl": "song_audio",
+        "outtmpl": "downloaded_song",
         "default_search": "ytsearch1",
         "noplaylist": True,
+        "geo_bypass": True,
+        "quiet": True,
+        "no_warnings": True,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
       info = ydl.extract_info(song_name, download=True)
       if "entries" in info:
         info = info["entries"][0]
-
       title = info.get("title", song_name)
-      audio_file = "song_audio.mp3"
+      audio_file = "downloaded_song.mp3"
 
-    # Telegram သို့ အသံဖိုင် ပို့ပေးခြင်း
+    # Telegram သို့ Audio ဖိုင်အစစ် တိုက်ရိုက်ပို့ခြင်း
     with open(audio_file, "rb") as audio:
       bot.send_audio(
           message.chat.id,
@@ -93,18 +93,16 @@ def download_and_send_song(message):
           reply_to_message_id=message.message_id,
       )
 
-    # ယာယီ ပို့ပြီးသား မက်ဆေ့ချ်ကို ဖျက်ခြင်း
     bot.delete_message(message.chat.id, processing_msg.message_id)
 
   except Exception as e:
     bot.edit_message_text(
-        f"❌ သီချင်းရှာဖွေရာတွင် အမှားဖြစ်ပွားပါသည်: {e}",
+        f"❌ သီချင်းဒေါင်းလုပ်လုပ်ရာတွင် အမှားဖြစ်ပွားပါသည် (သို့မဟုတ် YouTube မှ တားမြစ်ထားပါသည်)။",
         message.chat.id,
         processing_msg.message_id,
     )
 
   finally:
-    # ဖိုင်တွဲထဲမှ ယာယီသိမ်းထားသော အသံဖိုင်ကို ဖျက်ရန်
     if audio_file and os.path.exists(audio_file):
       os.remove(audio_file)
 
@@ -135,4 +133,4 @@ def ban_user(message):
 
 print("Bot is running...")
 bot.infinity_polling()
-  
+      
