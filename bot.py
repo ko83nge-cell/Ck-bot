@@ -374,7 +374,7 @@ async def broadcast_cmd(update, context):
         except Exception:
             failed += 1
 
-    await message.reply_text(f"📣 Broadcast ပြီးပါပြီ。\nပို့နိုင်: {sent}\nမပို့နိုင်: {failed}")
+    await message.reply_text(f"📣 Broadcast ပြီးပါပြီ။\nပို့နိုင်: {sent}\nမပို့နိုင်: {failed}")
 
 
 async def remember_private(update, context):
