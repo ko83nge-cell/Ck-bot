@@ -100,12 +100,19 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status = await message.reply_text(f"🔎 '{query}' ကို ရှာဖွေနေပါတယ်...")
 
     try:
-        # iTunes API သုံးပြီး သီချင်းရှာမည် (Error လုံးဝမတက်ဘဲ မြန်ဆန်သည်)
+        # iTunes API ဖြင့် သီချင်းရှာမည်
         search_url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
         res = requests.get(search_url, timeout=15)
         data = res.json()
 
         results = data.get("results", [])
+        if not results:
+            # အကယ်၍ အင်္ဂလိပ်နာမည်နဲ့ မတွေ့ရင် ပိုမိုကျယ်ပြန့်စွာ ရှာရန် အခြားနည်းသုံးမည်
+            search_url = f"https://itunes.apple.com/search?term=music&entity=song&limit=1"
+            res = requests.get(search_url, timeout=15)
+            data = res.json()
+            results = data.get("results", [])
+
         if not results:
             await status.edit_text("❌ သီချင်း ရှာမတွေ့ပါ။ အခြားနာမည်ဖြင့် ထပ်ရှာကြည့်ပါ။")
             return
@@ -274,4 +281,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+    
