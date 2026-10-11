@@ -1,5 +1,6 @@
 import os
 import re
+import base64
 import sqlite3
 import logging
 import asyncio
@@ -45,10 +46,65 @@ user_locks = defaultdict(asyncio.Lock)
 
 
 # =========================
+# YOUTUBE COOKIES
+# =========================
+
+def write_cookies_file(folder):
+    """
+    Read cookies from Railway Variables.
+    Supports:
+      YOUTUBE_COOKIES_B64 = Base64 encoded cookies.txt
+      YOUTUBE_COOKIES = Base64 or raw Netscape cookies text
+
+    Never print cookie contents to logs.
+    """
+
+    value = (
+        os.getenv("YOUTUBE_COOKIES_B64", "").strip()
+        or os.getenv("YOUTUBE_COOKIES", "").strip()
+    )
+
+    if not value:
+        return None
+
+    if value.startswith("# Netscape HTTP Cookie File") or (
+        value.startswith("# HTTP Cookie File")
+    ):
+        cookie_text = value
+    else:
+        try:
+            decoded = base64.b64decode(value, validate=True)
+            cookie_text = decoded.decode("utf-8")
+        except Exception:
+            raise RuntimeError(
+                "YouTube Cookies Variable ကို စစ်ပါ။ "
+                "Base64 စာသား သို့မဟုတ် cookies.txt "
+                "Netscape format ဖြစ်ရပါမယ်။"
+            )
+
+    if not cookie_text.strip():
+        raise RuntimeError("YouTube Cookies ဖိုင် ဗလာဖြစ်နေပါတယ်။")
+
+    cookie_path = Path(folder) / "cookies.txt"
+    cookie_path.write_text(cookie_text.rstrip() + "\n", encoding="utf-8")
+
+    try:
+        cookie_path.chmod(0o600)
+    except OSError:
+        pass
+
+    return str(cookie_path)
+
+
+# =========================
 # DATABASE
 # =========================
 
 def init_db():
+    db_path = Path(DB_PATH)
+    if str(db_path.parent) not in ("", "."):
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
     with sqlite3.connect(DB_PATH) as db:
         db.execute("""
             CREATE TABLE IF NOT EXISTS warnings (
@@ -68,10 +124,12 @@ def add_warning(chat_id, user_id):
             ON CONFLICT(chat_id, user_id)
             DO UPDATE SET count = count + 1
         """, (chat_id, user_id))
+
         row = db.execute(
             "SELECT count FROM warnings WHERE chat_id=? AND user_id=?",
             (chat_id, user_id),
         ).fetchone()
+
         return row[0]
 
 
@@ -81,6 +139,7 @@ def get_warnings(chat_id, user_id):
             "SELECT count FROM warnings WHERE chat_id=? AND user_id=?",
             (chat_id, user_id),
         ).fetchone()
+
         return row[0] if row else 0
 
 
@@ -118,14 +177,16 @@ async def is_admin(update, context):
 
 async def get_target(update):
     message = update.effective_message
+
     if message and message.reply_to_message:
         return message.reply_to_message.from_user
+
     return None
 
 
 def error_text(exc):
     text = " ".join(str(exc).split())
-    return f"{type(exc).__name__}: {text[:400]}"
+    return f"{type(exc).__name__}: {text[:300]}"
 
 
 # =========================
@@ -151,12 +212,12 @@ async def help_command(update, context):
         "/help - အကူအညီ\n"
         "/song သီချင်းအမည် - သီချင်းရှာရန်\n\n"
         "🛡️ Group Admin Commands\n"
-        "/warn - Reply လုပ်ထားသူကို Warning ပေးရန်\n"
+        "/warn - Reply လုပ်ပြီး Warning ပေးရန်\n"
         "/warnings - Warning ကြည့်ရန်\n"
-        "/ban - Reply လုပ်ထားသူကို Ban လုပ်ရန်\n"
+        "/ban - Reply လုပ်ပြီး Ban လုပ်ရန်\n"
         "/unban USER_ID - Unban လုပ်ရန်\n"
-        "/mute - Reply လုပ်ထားသူကို Mute လုပ်ရန်\n"
-        "/unmute - Reply လုပ်ထားသူကို Unmute လုပ်ရန်"
+        "/mute - Reply လုပ်ပြီး Mute လုပ်ရန်\n"
+        "/unmute - Reply လုပ်ပြီး Unmute လုပ်ရန်"
     )
 
 
@@ -172,6 +233,7 @@ def search_songs(search_text):
         "skip_download": True,
         "noplaylist": True,
         "socket_timeout": 20,
+        "retries": 1,
     }
 
     with yt_dlp.YoutubeDL(options) as ydl:
@@ -202,8 +264,12 @@ def search_songs(search_text):
 def song_keyboard(songs, offset=0):
     buttons = []
 
-    for index in range(offset, min(offset + PAGE_SIZE, len(songs))):
+    for index in range(
+        offset,
+        min(offset + PAGE_SIZE, len(songs)),
+    ):
         title = songs[index]["title"][:45]
+
         buttons.append([
             InlineKeyboardButton(
                 f"{index + 1}. {title}",
@@ -214,22 +280,29 @@ def song_keyboard(songs, offset=0):
     nav = []
 
     if offset > 0:
-        nav.append(InlineKeyboardButton(
-            "⬅️ အရင်",
-            callback_data=f"page:{max(0, offset - PAGE_SIZE)}",
-        ))
+        nav.append(
+            InlineKeyboardButton(
+                "⬅️ အရင်",
+                callback_data=f"page:{max(0, offset - PAGE_SIZE)}",
+            )
+        )
 
     if offset + PAGE_SIZE < len(songs):
-        nav.append(InlineKeyboardButton(
-            "နောက်ထပ် ➡️",
-            callback_data=f"page:{offset + PAGE_SIZE}",
-        ))
+        nav.append(
+            InlineKeyboardButton(
+                "နောက်ထပ် ➡️",
+                callback_data=f"page:{offset + PAGE_SIZE}",
+            )
+        )
 
     if nav:
         buttons.append(nav)
 
     buttons.append([
-        InlineKeyboardButton("❌ ပိတ်ရန်", callback_data="close")
+        InlineKeyboardButton(
+            "❌ ပိတ်ရန်",
+            callback_data="close",
+        )
     ])
 
     return InlineKeyboardMarkup(buttons)
@@ -237,6 +310,7 @@ def song_keyboard(songs, offset=0):
 
 async def song(update, context):
     message = update.effective_message
+
     if not message:
         return
 
@@ -249,13 +323,20 @@ async def song(update, context):
         )
         return
 
-    status = await message.reply_text("🔎 သီချင်းရှာနေပါတယ်...")
+    status = await message.reply_text(
+        "🔎 သီချင်းရှာနေပါတယ်..."
+    )
 
     try:
-        songs = await asyncio.to_thread(search_songs, search_text)
+        songs = await asyncio.to_thread(
+            search_songs,
+            search_text,
+        )
 
         if not songs:
-            await status.edit_text("❌ သီချင်းမတွေ့ပါ။")
+            await status.edit_text(
+                "❌ သီချင်းမတွေ့ပါ။ နောက်တစ်ကြိမ် ပြန်ရှာကြည့်ပါ။"
+            )
             return
 
         context.user_data["songs"] = songs
@@ -281,7 +362,7 @@ async def song(update, context):
 def download_song(video_id, folder):
     if not shutil.which("ffmpeg"):
         raise RuntimeError(
-            "FFmpeg မတွေ့ပါ။ Dockerfile ကို စစ်ပါ။"
+            "FFmpeg မတွေ့ပါ။ Railway Build Configuration ကို စစ်ပါ။"
         )
 
     output = str(Path(folder) / "audio.%(ext)s")
@@ -291,6 +372,7 @@ def download_song(video_id, folder):
         "outtmpl": output,
         "noplaylist": True,
         "quiet": True,
+        "no_warnings": True,
         "socket_timeout": 30,
         "retries": 2,
         "max_filesize": MAX_AUDIO_SIZE,
@@ -301,6 +383,11 @@ def download_song(video_id, folder):
         }],
     }
 
+    cookie_path = write_cookies_file(folder)
+
+    if cookie_path:
+        options["cookiefile"] = cookie_path
+
     url = f"https://www.youtube.com/watch?v={video_id}"
 
     with yt_dlp.YoutubeDL(options) as ydl:
@@ -309,10 +396,14 @@ def download_song(video_id, folder):
     audio_path = Path(folder) / "audio.mp3"
 
     if not audio_path.exists():
-        raise RuntimeError("MP3 ဖိုင် မဖန်တီးနိုင်ပါ။")
+        raise RuntimeError(
+            "MP3 ဖိုင် မဖန်တီးနိုင်ပါ။ FFmpeg ကို စစ်ပါ။"
+        )
 
     if audio_path.stat().st_size > MAX_AUDIO_SIZE:
-        raise RuntimeError("Audio ဖိုင် 45 MB ထက် ကြီးနေပါတယ်။")
+        raise RuntimeError(
+            "Audio ဖိုင် 45 MB ထက် ကြီးနေပါတယ်။"
+        )
 
     return (
         str(audio_path),
@@ -327,6 +418,8 @@ async def song_callback(update, context):
     if not query or not query.data:
         return
 
+    data = query.data
+
     if context.user_data.get("song_owner") != query.from_user.id:
         await query.answer(
             "ဒီသီချင်းစာရင်းကို ရှာထားသူသာ ရွေးနိုင်ပါတယ်။",
@@ -334,11 +427,11 @@ async def song_callback(update, context):
         )
         return
 
-    data = query.data
-
     if data == "close":
         await query.answer()
-        await query.edit_message_text("စာရင်းပိတ်လိုက်ပါပြီ။")
+        await query.edit_message_text(
+            "စာရင်းပိတ်လိုက်ပါပြီ။"
+        )
         return
 
     songs = context.user_data.get("songs", [])
@@ -346,15 +439,26 @@ async def song_callback(update, context):
     if data.startswith("page:"):
         try:
             offset = int(data.split(":", 1)[1])
-            if offset < 0 or offset >= len(songs):
+
+            if (
+                offset < 0
+                or offset >= len(songs)
+                or offset % PAGE_SIZE != 0
+            ):
                 raise ValueError
+
             await query.answer()
             await query.edit_message_text(
                 "🎵 သီချင်းစာရင်း",
                 reply_markup=song_keyboard(songs, offset),
             )
+
         except Exception:
-            await query.answer("စာရင်းသက်တမ်းကုန်သွားပါပြီ။", show_alert=True)
+            await query.answer(
+                "စာရင်းသက်တမ်းကုန်သွားပါပြီ။",
+                show_alert=True,
+            )
+
         return
 
     if not data.startswith("pick:"):
@@ -365,19 +469,23 @@ async def song_callback(update, context):
         index = int(data.split(":", 1)[1])
         selected = songs[index]
     except (ValueError, IndexError):
-        await query.answer("သီချင်းကို ပြန်ရှာပါ။", show_alert=True)
+        await query.answer(
+            "သီချင်းကို ပြန်ရှာပါ။",
+            show_alert=True,
+        )
         return
-
-    await query.answer()
 
     user_id = query.from_user.id
     lock = user_locks[user_id]
 
     if lock.locked():
-        await query.message.reply_text(
-            "⏳ Audio တစ်ခု ရယူနေပြီးသားပါ။ ခဏစောင့်ပါ။"
+        await query.answer(
+            "⏳ Audio တစ်ခု ရယူနေပြီးသားပါ။ ခဏစောင့်ပါ။",
+            show_alert=True,
         )
         return
+
+    await query.answer()
 
     await query.edit_message_text(
         "⏳ Audio ပြင်ဆင်နေပါတယ်။\n"
@@ -388,10 +496,12 @@ async def song_callback(update, context):
         try:
             async with download_semaphore:
                 with tempfile.TemporaryDirectory() as folder:
-                    audio_path, title, performer = await asyncio.to_thread(
-                        download_song,
-                        selected["id"],
-                        folder,
+                    audio_path, title, performer = (
+                        await asyncio.to_thread(
+                            download_song,
+                            selected["id"],
+                            folder,
+                        )
                     )
 
                     with open(audio_path, "rb") as audio:
@@ -412,6 +522,7 @@ async def song_callback(update, context):
 
         except Exception as exc:
             logger.exception("Audio download/send failed")
+
             message = (
                 "❌ Audio ရယူမရပါ။\n\n"
                 + error_text(exc)
@@ -420,7 +531,13 @@ async def song_callback(update, context):
             if "Sign in to confirm" in str(exc):
                 message += (
                     "\n\nYouTube က ဝင်ရောက်ခွင့်ကို ကန့်သတ်ထားပါတယ်။ "
-                    "FFmpeg ပြဿနာ မဟုတ်ပါ။"
+                    "Cookies သက်တမ်းနဲ့ Railway Variable ကို စစ်ပါ။"
+                )
+
+            elif "cookies" in str(exc).lower():
+                message += (
+                    "\n\nCookies Variable ကို စစ်ပါ။ "
+                    "Cookies ကို GitHub သို့မဟုတ် Chat ထဲ မပို့ပါနဲ့။"
                 )
 
             await query.message.reply_text(message)
@@ -432,13 +549,19 @@ async def song_callback(update, context):
 
 async def warn(update, context):
     if not await is_admin(update, context):
-        await reply(update, "❌ Admin သာ အသုံးပြုနိုင်ပါတယ်။")
+        await reply(
+            update,
+            "❌ Admin သာ အသုံးပြုနိုင်ပါတယ်။",
+        )
         return
 
     target = await get_target(update)
 
     if not target:
-        await reply(update, "User message ကို Reply လုပ်ပြီး /warn ပို့ပါ။")
+        await reply(
+            update,
+            "User message ကို Reply လုပ်ပြီး /warn ပို့ပါ။",
+        )
         return
 
     if target.is_bot:
@@ -459,6 +582,13 @@ async def warn(update, context):
 
 
 async def warnings_command(update, context):
+    if not await is_admin(update, context):
+        await reply(
+            update,
+            "❌ Admin သာ အသုံးပြုနိုင်ပါတယ်။",
+        )
+        return
+
     target = await get_target(update)
 
     if target:
@@ -479,7 +609,10 @@ async def warnings_command(update, context):
         user_id,
     )
 
-    await reply(update, f"⚠️ Warning အရေအတွက်: {count}")
+    await reply(
+        update,
+        f"⚠️ Warning အရေအတွက်: {count}",
+    )
 
 
 async def ban(update, context):
@@ -502,10 +635,16 @@ async def ban(update, context):
             update.effective_chat.id,
             target.id,
         )
-        await reply(update, f"🚫 {target.full_name} ကို Ban လုပ်ပြီးပါပြီ။")
+        await reply(
+            update,
+            f"🚫 {target.full_name} ကို Ban လုပ်ပြီးပါပြီ။",
+        )
     except Exception:
         logger.exception("Ban failed")
-        await reply(update, "❌ Ban မလုပ်နိုင်ပါ။ Bot Admin permission စစ်ပါ။")
+        await reply(
+            update,
+            "❌ Ban မလုပ်နိုင်ပါ။ Bot Admin permission စစ်ပါ။",
+        )
 
 
 async def unban(update, context):
@@ -548,12 +687,20 @@ async def mute(update, context):
         await context.bot.restrict_chat_member(
             update.effective_chat.id,
             target.id,
-            permissions=ChatPermissions(can_send_messages=False),
+            permissions=ChatPermissions(
+                can_send_messages=False
+            ),
         )
-        await reply(update, f"🔇 {target.full_name} ကို Mute လုပ်ပြီးပါပြီ။")
+        await reply(
+            update,
+            f"🔇 {target.full_name} ကို Mute လုပ်ပြီးပါပြီ။",
+        )
     except Exception:
         logger.exception("Mute failed")
-        await reply(update, "❌ Mute မလုပ်နိုင်ပါ။ Bot Admin permission စစ်ပါ။")
+        await reply(
+            update,
+            "❌ Mute မလုပ်နိုင်ပါ။ Bot Admin permission စစ်ပါ။",
+        )
 
 
 async def unmute(update, context):
@@ -584,10 +731,16 @@ async def unmute(update, context):
                 can_add_web_page_previews=True,
             ),
         )
-        await reply(update, f"🔊 {target.full_name} ကို Unmute လုပ်ပြီးပါပြီ။")
+        await reply(
+            update,
+            f"🔊 {target.full_name} ကို Unmute လုပ်ပြီးပါပြီ။",
+        )
     except Exception:
         logger.exception("Unmute failed")
-        await reply(update, "❌ Unmute မလုပ်နိုင်ပါ။ Bot Admin permission စစ်ပါ။")
+        await reply(
+            update,
+            "❌ Unmute မလုပ်နိုင်ပါ။ Bot Admin permission စစ်ပါ။",
+        )
 
 
 # =========================
@@ -615,13 +768,17 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("song", song))
 
-    app.add_handler(CallbackQueryHandler(
-        song_callback,
-        pattern=r"^(pick:|page:|close$)",
-    ))
+    app.add_handler(
+        CallbackQueryHandler(
+            song_callback,
+            pattern=r"^(pick:\d+|page:\d+|close)$",
+        )
+    )
 
     app.add_handler(CommandHandler("warn", warn))
-    app.add_handler(CommandHandler("warnings", warnings_command))
+    app.add_handler(
+        CommandHandler("warnings", warnings_command)
+    )
     app.add_handler(CommandHandler("ban", ban))
     app.add_handler(CommandHandler("unban", unban))
     app.add_handler(CommandHandler("mute", mute))
