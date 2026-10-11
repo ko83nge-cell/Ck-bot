@@ -8,7 +8,6 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
 )
-import yt_dlp
 
 # =========================
 # SETTINGS
@@ -93,21 +92,19 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await message.reply_text(
             "သီချင်းနာမည် ထည့်ပေးပါ။\n"
-            "ဥပမာ: /song a hmat ta ya"
+            "ဥပမာ: /song relaxing music"
         )
         return
 
     query = " ".join(context.args)
     status = await message.reply_text(f"🔎 '{query}' ကို ရှာဖွေနေပါတယ်...")
 
-    audio_path = None
     try:
-        # Invidious API သုံးပြီး YouTube ဗီဒီယိုလင့်ခ် ရှာမည် (Bot Detection ကို ရှောင်ရှားရန်)
+        # Invidious API သုံးပြီး YouTube ဗီဒီယိုလင့်ခ် ရှာမည်
         search_url = f"https://invidious.jing.rocks/api/v1/search?q={query}&type=video"
         res = requests.get(search_url, timeout=15)
         
         if res.status_code != 200:
-            # အကယ်၍ 1 ခုမရရင် အခြား Public Invidious instance သို့ ပြောင်းမည်
             search_url = f"https://inv.nadeko.net/api/v1/search?q={query}&type=video"
             res = requests.get(search_url, timeout=15)
 
@@ -121,51 +118,61 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
         artist = results[0].get('author', 'Unknown Artist')
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
 
-        await status.edit_text("📥 သီချင်း ဒေါင်းလုဒ်လုပ်နေပါပြီ...")
+        await status.edit_text("📥 သီချင်း ဖိုင်ကို ဆွဲယူနေပါပြီ...")
 
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'outtmpl': 'downloads/%(id)s.%(ext)s',
-            'quiet': True,
-            'no_warnings': True,
-        }
+        # Cobalt API သုံးပြီး YouTube ဗီဒီယိုကို MP3 လင့်ခ်အဖြစ် ပြောင်းမည်
+        cobalt_res = requests.post(
+            "https://co.wuk.sh/api/json",
+            json={
+                "url": yt_url,
+                "isAudioOnly": True,
+                "downloadMode": "audio"
+            },
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            },
+            timeout=20
+        )
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(yt_url, download=True)
-            filename = ydl.prepare_filename(info)
-            audio_path = os.path.splitext(filename)[0] + '.mp3'
+        cobalt_data = cobalt_res.json()
+        audio_url = None
 
-        if not audio_path or not os.path.exists(audio_path):
-            await status.edit_text("❌ သီချင်းဖိုင် ပြောင်းလဲ၍ မရပါ။")
+        if cobalt_res.status_code == 200 and "url" in cobalt_data:
+            audio_url = cobalt_data["url"]
+        elif "picker" in cobalt_data and len(cobalt_data["picker"]) > 0:
+            audio_url = cobalt_data["picker"][0].get("url")
+
+        if not audio_url:
+            await status.edit_text("❌ သီချင်းလင့်ခ် ရယူ၍ မရပါ။")
             return
+
+        # အသံဖိုင်ကို ဒေါင်းလုဒ်ဆွဲမည်
+        audio_res = requests.get(audio_url, stream=True, timeout=30)
+        audio_res.raise_for_status()
+
+        audio_data = io.BytesIO()
+        for chunk in audio_res.iter_content(chunk_size=8192):
+            if chunk:
+                audio_data.write(chunk)
+
+        audio_data.seek(0)
+        audio_data.name = f"{title[:20]}.mp3"
 
         await status.edit_text("🎵 သီချင်း ပို့နေပါပြီ...")
 
-        with open(audio_path, 'rb') as audio:
-            await message.reply_audio(
-                audio=audio,
-                title=title,
-                performer=artist,
-                caption=f"🎵 {title}\n🎤 {artist}",
-            )
+        await message.reply_audio(
+            audio=audio_data,
+            title=title,
+            performer=artist,
+            caption=f"🎵 {title}\n🎤 {artist}",
+        )
 
         await status.delete()
 
     except Exception as e:
         logger.exception("Song download failed")
         await status.edit_text(f"❌ Error: သီချင်းရယူရာတွင် အခက်အခဲရှိနေပါသည်။")
-
-    finally:
-        if audio_path and os.path.exists(audio_path):
-            try:
-                os.remove(audio_path)
-            except:
-                pass
 
 
 # =========================
@@ -276,8 +283,6 @@ async def unmute(update, context):
 def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN မသတ်မှတ်ရသေးပါ။")
-
-    os.makedirs("downloads", exist_ok=True)
 
     app = Application.builder().token(BOT_TOKEN).build()
 
