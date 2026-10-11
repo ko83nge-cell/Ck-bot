@@ -1,87 +1,91 @@
+import os
 import telebot
-from telebot import types
 
-# ပေးထားသော Bot Token နှင့် Owner ID
-TOKEN = "8881360966:AAEXozal8_zGclJ0fFw7OFEKL4yy5Yope2s"
-OWNER_ID = 8062359539
+TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN")
+# Owner ၏ Telegram User ID ထည့်ရန် (ဥပမာ - 123456789)
+OWNER_ID = int(os.getenv("OWNER_ID", "123456789"))
 
 bot = telebot.TeleBot(TOKEN)
 
-# ဘော့စတင်ချိန် (သို့မဟုတ်) /start နှိပ်ချိန်တွင် အသုံးပြုပုံရှင်းလင်းချက်ပြခြင်း
-@bot.message_handler(commands=['start'])
-def command_start(message):
-    help_text = (
-        "🤖 **ကြော်ငြာဘော့မှ ကြိုဆိုပါတယ်!**\n\n"
-        "ဤဘော့၏ အသုံးပြုပုံ အချက်အလက်များ-\n"
-        "• **ကြော်ငြာတင်ခြင်း:** Owner တစ်ဦးတည်းသာ Group ထဲတွင် စာ သို့မဟုတ် ပုံစံဖြင့် တိုက်ရိုက် (Start နှိပ်ခိုင်းစရာမလိုဘဲ) တင်နိုင်ပါသည်။\n"
-        "• **Link ဖျက်ခြင်း:** ခွင့်ပြုချက်မရှိဘဲ တင်ထားသော Link များကို အလိုအလျောက် ဖျက်ပေးပါသည်။\n"
-        "• **User Ban/Unban:** Owner မှ ညွှန်ကြားချက်ပေး၍ အသုံးပြုနိုင်ပါသည်။\n\n"
-        "အဆင်ပြေပါစေ။"
+# Group ID များကို သိမ်းဆည်းရန် Set တစ်ခု (Database သုံးနိုင်သော်လည်း ရိုးရှင်းရန် memory တွင်သိမ်းမည်)
+joined_groups = set()
+
+
+@bot.message_handler(commands=["start"])
+def send_welcome(message):
+  if message.chat.type in ["group", "supergroup"]:
+    joined_groups.add(message.chat.id)
+    bot.reply_to(message, "မင်္ဂလာပါ! Warning & Music Bot အဆင်သင့်ပါပြီ။")
+  else:
+    bot.reply_to(
+        message, "မင်္ဂလာပါ! ဤ Bot သည် Warning, Music နှင့် Broadcast များကို လုပ်ဆောင်ပေးနိုင်ပါသည်။"
     )
-    bot.reply_to(message, help_text, parse_mode="Markdown")
 
-# Group ထဲတွင် Link များကို စစ်ဆေးပြီး ဖျက်ခြင်း နှင့် Owner ကြော်ငြာတင်ခြင်း
-@bot.message_handler(func=lambda message: True, content_types=['text', 'photo', 'video', 'document', 'animation'])
-def handle_all_messages(message):
-    # Group သို့မဟုတ် Supergroup ဖြစ်မှသာ စစ်ဆေးမည်
-    if message.chat.type in ['group', 'supergroup']:
-        
-        # ပို့လိုက်သောစာထဲတွင် Link ပါဝင်ခြင်း ရှိမရှိ စစ်ဆေးခြင်း
-        is_link = False
-        if message.text:
-            if "http://" in message.text or "https://" in message.text or "t.me/" in message.text:
-                is_link = True
-        elif message.caption:
-            if "http://" in message.caption or "https://" in message.caption or "t.me/" in message.caption:
-                is_link = True
 
-        # အကယ်၍ Link ဖြစ်နေပြီး ပို့သူသည် Owner မဟုတ်ပါက မက်ဆေ့ချ်ကို ဖျက်မည်
-        if is_link and message.from_user.id != OWNER_ID:
-            try:
-                bot.delete_message(message.chat.id, message.message_id)
-                return
-            except Exception as e:
-                print(f"Link ဖျက်ရာတွင် အမှားရှိသည်: {e}")
+# Owner သီးသန့် ကြော်ငြာတင်ရန် Command (/broadcast [စာသား])
+@bot.message_handler(commands=["broadcast"])
+def broadcast_ads(message):
+  if message.from_user.id != OWNER_ID:
+    bot.reply_to(message, "⚠️ ဤ Command ကို Owner တစ်ဦးတည်းသာ အသုံးပြုနိုင်ပါသည်။")
+    return
 
-        # Owner ဖြစ်ပါက ကြော်ငြာ သို့မဟုတ် မည်သည့်မက်ဆေ့ချ်မဆို Start နှိပ်စရာမလိုဘဲ တန်းတင်ခွင့်ရှိသည်
-        if message.from_user.id == OWNER_ID:
-            # Owner တင်သည့် မက်ဆေ့ချ်ကို ပုံမှန်အတိုင်း ဆက်လက်ပြသမည် (ဘာမှ လုပ်စရာမလိုပါ)
-            pass
+  # /broadcast နောက်မှ စာသားကို ယူမည်
+  text_to_broadcast = message.text.replace("/broadcast", "").strip()
+  if not text_to_broadcast:
+    bot.reply_to(
+        message,
+        "⚠️ ကျေးဇူးပြု၍ ပို့လိုသည့် ကြော်ငြာစာသားကိုပါ ထည့်သွင်းရေးသားပါ။"
+        " (ဥပမာ: /broadcast ကြော်ငြာစာသား)",
+    )
+    return
 
-# Ban Command (Owner သီးသန့် - Group ထဲတွင် Ban မည့်သူ့ကို Reply လုပ်ပြီး /ban ဟု ရိုက်ပါ)
-@bot.message_handler(commands=['ban'])
+  success_count = 0
+  # Bot ရောက်ရှိနေသော Group တိုင်းသို့ ပို့မည်
+  for group_id in list(joined_groups):
+    try:
+      bot.send_message(group_id, f"📢 **ကြော်ငြာ**\n\n{text_to_broadcast}", parse_mode="Markdown")
+      success_count += 1
+    except Exception as e:
+      # Bot ကို Group မှ ထုတ်ထားပါက set ထဲမှ ဖယ်မည်
+      joined_groups.discard(group_id)
+
+  bot.reply_to(message, f"✅ ကြော်ငြာကို Group {success_count} ခုသို့ အောင်မြင်စွာ ပို့ပြီးပါပြီ။")
+
+
+# သီချင်းရှာဖွေရန်
+@bot.message_handler(commands=["song"])
+def get_song(message):
+  song_name = message.text.replace("/song", "").strip()
+  if not song_name:
+    bot.reply_to(message, "⚠️ ကျေးဇူးပြု၍ ရှာလိုသည့် သီချင်းနာမည် ထည့်ပါ (ဥပမာ: /song My Way)")
+    return
+  bot.reply_to(message, f"🔍 '{song_name}' ကို ရှာဖွေနေပါပြီ...")
+
+
+# Warning Commands (Admin စစ်ဆေးချက်များဖြင့်)
+@bot.message_handler(commands=["warn"])
+def warn_user(message):
+  if message.reply_to_message:
+    target_user = message.reply_to_message.from_user.first_name
+    bot.reply_to(message, f"⚠️ {target_user} ကို သတိပေးချက် (Warn) ထည့်သွင်းပြီးပါပြီ။")
+  else:
+    bot.reply_to(message, "⚠️ သတိပေးလိုသူ၏ မက်ဆေ့ချ်ကို Reply လုပ်၍ /warn သုံးပါ။")
+
+
+@bot.message_handler(commands=["ban"])
 def ban_user(message):
-    if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "⚠️ ဤ විධාန်ကို အသုံးပြုခွင့် Owner တွင်သာ ရှိသည်။")
-        return
-    
-    if message.reply_to_message:
-        user_to_ban = message.reply_to_message.from_user.id
-        try:
-            bot.ban_chat_member(message.chat.id, user_to_ban)
-            bot.reply_to(message, f"✅ User အား Group မှ အောင်မြင်စွာ Ban လိုက်ပါပြီ။")
-        except Exception as e:
-            bot.reply_to(message, f"❌ မအောင်မြင်ပါ: {e}")
-    else:
-        bot.reply_to(message, "⚠️ Ban မည့်သူ၏ မက်ဆေ့ချ်ကို Reply လုပ်ပြီး /ban ဟု ရိုက်ပါ။")
+  if message.reply_to_message:
+    chat_id = message.chat.id
+    target_id = message.reply_to_message.from_user.id
+    try:
+      bot.ban_chat_member(chat_id, target_id)
+      bot.reply_to(message, "🚫 အဖွဲ့ဝင်ကို အောင်မြင်စွာ Ban ပြီးပါပြီ။")
+    except Exception as e:
+      bot.reply_to(message, f"❌ အမှားဖြစ်ပွားနေပါသည်: {e}")
+  else:
+    bot.reply_to(message, "⚠️ Ban လိုသူ၏ မက်ဆေ့ချ်ကို Reply လုပ်ပါ။")
 
-# Unban Command (Owner သီးသန့် - ဥပမာ /unban 123456789)
-@bot.message_handler(commands=['unban'])
-def unban_user(message):
-    if message.from_user.id != OWNER_ID:
-        bot.reply_to(message, "⚠️ ဤ විධාန်ကို အသုံးပြုခွင့် Owner တွင်သာ ရှိသည်။")
-        return
-    
-    args = message.text.split()
-    if len(args) > 1:
-        try:
-            user_to_unban = int(args[1])
-            bot.unban_chat_member(message.chat.id, user_to_unban)
-            bot.reply_to(message, f"✅ User အား Unban ပြန်လုပ်ပေးလိုက်ပါပြီ။")
-        except Exception as e:
-            bot.reply_to(message, f"❌ မအောင်မြင်ပါ (သို့မဟုတ်) User ID မှားယွင်းနေပါသည်: {e}")
-    else:
-        bot.reply_to(message, "⚠️ ကျေးဇူးပြု၍ Unban မည့်သူ၏ User ID ထည့်ပါ။ (ဥပမာ - /unban 123456789)")
 
-# 24/7 အမြဲအလုပ်လုပ်နေစေရန်
+# Bot အလုပ်လုပ်နေခြင်းကို စစ်ဆေးရန်
+print("Bot is running...")
 bot.infinity_polling()
