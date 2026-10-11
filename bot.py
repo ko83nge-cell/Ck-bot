@@ -100,33 +100,34 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = " ".join(context.args)
     status = await message.reply_text(f"🔎 YouTube မှ '{query}' ကို ရှာဖွေနေပါတယ်...")
 
-    def download_audio():
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'outtmpl': 'downloads/%(id)s.%(ext)s',
-            'quiet': True,
-            'no_warnings': True,
-            'default_search': 'ytsearch1',
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(f"ytsearch1:{query}", download=True)
-            if 'entries' in info:
-                info = info['entries'][0]
-            filename = ydl.prepare_filename(info)
-            audio_file = os.path.splitext(filename)[0] + '.mp3'
-            return audio_file, info.get('title', 'Unknown Title'), info.get('uploader', 'Unknown Artist')
-
+    audio_path = None
     try:
+        def download_audio():
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+                'outtmpl': 'downloads/%(id)s.%(ext)s',
+                'quiet': True,
+                'no_warnings': True,
+                'default_search': 'ytsearch1',
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(f"ytsearch1:{query}", download=True)
+                if 'entries' in info:
+                    info = info['entries'][0]
+                filename = ydl.prepare_filename(info)
+                audio_file = os.path.splitext(filename)[0] + '.mp3'
+                return audio_file, info.get('title', 'Unknown Title'), info.get('uploader', 'Unknown Artist')
+
         loop = asyncio.get_running_loop()
         audio_path, title, artist = await loop.run_in_executor(None, download_audio)
 
-        if not os.path.exists(audio_path):
-            await status.edit_text("❌ သီချင်းဖိုင် ဒေါင်းလုဒ်လုပ်၍ မရပါ။")
+        if not audio_path or not os.path.exists(audio_path):
+            await status.edit_text("❌ သီချင်းဖိုင် ရှာမတွေ့ပါ။ အခြားနာမည်ဖြင့် ထပ်ရှာကြည့်ပါ။")
             return
 
         await status.edit_text("🎵 သီချင်း ပို့နေပါပြီ...")
@@ -141,13 +142,16 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await status.delete()
 
-        # Clean up file after sending
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
-
-    except Exception:
+    except Exception as e:
         logger.exception("YouTube song download failed")
-        await status.edit_text("❌ သီချင်းရှာဖွေရာတွင် အမှားအယွင်း ရှိသွားပါသည်။ နောက်တစ်ကြိမ် ထပ်ကြိုးစားပါ။")
+        await status.edit_text(f"❌ Error: {str(e)[:100]}")
+
+    finally:
+        if audio_path and os.path.exists(audio_path):
+            try:
+                os.remove(audio_path)
+            except:
+                pass
 
 
 # =========================
@@ -279,4 +283,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
