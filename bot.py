@@ -1,27 +1,25 @@
 import os
 import io
 import logging
-import requests
-
+import asyncio
 from telegram import Update, ChatPermissions
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
 )
+import yt_dlp
 
 # =========================
 # SETTINGS
 # =========================
 
 BOT_TOKEN = "8824850208:AAGkmULcNJxWx-39-80r-8oJNtSc9g3bSTM"
-JAMENDO_CLIENT_ID = "957b221f"
+OWNER_ID = 8062359539
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Warnings are stored in memory.
-# They reset when the bot restarts.
 warnings = {}
 
 
@@ -32,40 +30,29 @@ warnings = {}
 async def is_admin(update, context):
     if not update.effective_user or not update.effective_chat:
         return False
-
     member = await context.bot.get_chat_member(
         update.effective_chat.id,
         update.effective_user.id,
     )
-
     return member.status in ("administrator", "creator")
 
 
 async def get_target(update):
     message = update.effective_message
-
     if message and message.reply_to_message:
         return message.reply_to_message.from_user
-
     return None
 
 
 async def admin_only(update, context):
     if not update.effective_chat:
         return False
-
     if update.effective_chat.type == "private":
-        await update.effective_message.reply_text(
-            "ဒီ Command ကို Group ထဲမှာ သုံးပါ။"
-        )
+        await update.effective_message.reply_text("ဒီ Command ကို Group ထဲမှာ သုံးပါ။")
         return False
-
     if not await is_admin(update, context):
-        await update.effective_message.reply_text(
-            "ဒီ Command ကို Group Admin ပဲ သုံးနိုင်ပါတယ်။"
-        )
+        await update.effective_message.reply_text("ဒီ Command ကို Group Admin ပဲ သုံးနိုင်ပါတယ်။")
         return False
-
     return True
 
 
@@ -76,32 +63,28 @@ async def admin_only(update, context):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "မင်္ဂလာပါ! 🤖\n\n"
-        "Music နဲ့ Group Management Bot ပါ။\n\n"
-        "/song relaxing music - သီချင်းရှာရန်\n"
+        "YouTube Music & Group Management Bot ပါ။\n\n"
+        "/song သီချင်းနာမည် - YouTube မှ သီချင်းရှာပြီး ပို့ရန်\n"
         "/help - Command အားလုံးကြည့်ရန်"
     )
 
 
-async def help_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "🎵 MUSIC\n"
-        "/song သီချင်းနာမည်\n\n"
+        "/song သီချင်းနာမည် (မြန်မာ/အင်္ဂလိပ် မဆို ရှာနိုင်သည်)\n\n"
         "🛡️ ADMIN COMMANDS\n"
-        "အသုံးပြုမည့်သူရဲ့ Message ကို Reply လုပ်ပြီး သုံးပါ။\n\n"
         "/warn - သတိပေးရန်\n"
         "/warnings - Warn အရေအတွက်ကြည့်ရန်\n"
         "/ban - Ban လုပ်ရန်\n"
         "/unban USER_ID - Ban ပြန်ဖြုတ်ရန်\n"
         "/mute - Mute လုပ်ရန်\n"
-        "/unmute - Mute ပြန်ဖြုတ်ရန်\n\n"
-        "Bot ကို Group Admin ပေးထားဖို့ လိုပါတယ်။"
+        "/unmute - Mute ပြန်ဖြုတ်ရန်"
     )
 
 
 # =========================
-# MUSIC SEARCH
+# YOUTUBE MUSIC SEARCH & DOWNLOAD
 # =========================
 
 async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -110,305 +93,142 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await message.reply_text(
             "သီချင်းနာမည် ထည့်ပေးပါ။\n"
-            "ဥပမာ: /song relaxing music"
-        )
-        return
-
-    if not JAMENDO_CLIENT_ID:
-        await message.reply_text(
-            "JAMENDO_CLIENT_ID မသတ်မှတ်ရသေးပါ။"
+            "ဥပမာ: /song a hmat ta ya"
         )
         return
 
     query = " ".join(context.args)
-    status = await message.reply_text(
-        f"🔎 '{query}' ကို ရှာနေပါတယ်..."
-    )
+    status = await message.reply_text(f"🔎 YouTube မှ '{query}' ကို ရှာဖွေနေပါတယ်...")
+
+    def download_audio():
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'outtmpl': 'downloads/%(id)s.%(ext)s',
+            'quiet': True,
+            'no_warnings': True,
+            'default_search': 'ytsearch1',
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(f"ytsearch1:{query}", download=True)
+            if 'entries' in info:
+                info = info['entries'][0]
+            filename = ydl.prepare_filename(info)
+            audio_file = os.path.splitext(filename)[0] + '.mp3'
+            return audio_file, info.get('title', 'Unknown Title'), info.get('uploader', 'Unknown Artist')
 
     try:
-        response = requests.get(
-            "https://api.jamendo.com/v3.0/tracks/",
-            params={
-                "client_id": JAMENDO_CLIENT_ID,
-                "format": "json",
-                "search": query,
-                "limit": 10,
-                "audioformat": "mp31",
-            },
-            timeout=20,
-        )
-        response.raise_for_status()
-        data = response.json()
+        loop = asyncio.get_running_loop()
+        audio_path, title, artist = await loop.run_in_executor(None, download_audio)
 
-        tracks = data.get("results", [])
+        if not os.path.exists(audio_path):
+            await status.edit_text("❌ သီချင်းဖိုင် ဒေါင်းလုဒ်လုပ်၍ မရပါ။")
+            return
 
-        if not tracks:
-            await status.edit_text(
-                f"🎵 '{query}' နှင့် ကိုက်ညီသော သီချင်း မတွေ့ပါ။"
+        await status.edit_text("🎵 သီချင်း ပို့နေပါပြီ...")
+
+        with open(audio_path, 'rb') as audio:
+            await message.reply_audio(
+                audio=audio,
+                title=title,
+                performer=artist,
+                caption=f"🎵 {title}\n🎤 {artist}\nvia YouTube",
             )
-            return
-
-        track = None
-        audio_url = None
-
-        for t in tracks:
-            url = t.get("audio") or t.get("audiodownload")
-            if url:
-                track = t
-                audio_url = url
-                break
-
-        if not audio_url or not track:
-            await status.edit_text("❌ သီချင်းလင့်ခ် ရယူ၍ မရပါ။")
-            return
-
-        audio_response = requests.get(
-            audio_url,
-            timeout=30,
-            stream=True,
-        )
-        audio_response.raise_for_status()
-
-        audio_data = io.BytesIO()
-        for chunk in audio_response.iter_content(64 * 1024):
-            if chunk:
-                audio_data.write(chunk)
-
-        audio_data.seek(0)
-        audio_data.name = "song.mp3"
-
-        title = track.get("name", "Unknown")
-        artist = track.get("artist_name", "Unknown")
-
-        await message.reply_audio(
-            audio=audio_data,
-            title=title,
-            performer=artist,
-            caption=(
-                f"🎵 {title}\n"
-                f"🎤 {artist}\n"
-                f"Source: Jamendo"
-            ),
-        )
 
         await status.delete()
 
-    except requests.RequestException:
-        logger.exception("Music API or download error")
-        await status.edit_text(
-            "အင်တာနက် သို့မဟုတ် Music API မှာ "
-            "ပြဿနာရှိနေပါတယ်။ နောက်မှ ထပ်ကြိုးစားပါ။"
-        )
+        # Clean up file after sending
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
 
     except Exception:
-        logger.exception("Song command error")
-        await status.edit_text(
-            "သီချင်းပို့ရာမှာ အမှားဖြစ်သွားပါတယ်။"
-        )
+        logger.exception("YouTube song download failed")
+        await status.edit_text("❌ သီချင်းရှာဖွေရာတွင် အမှားအယွင်း ရှိသွားပါသည်။ နောက်တစ်ကြိမ် ထပ်ကြိုးစားပါ။")
 
 
 # =========================
-# WARN
+# WARN / BAN / MUTE COMMANDS
 # =========================
 
 async def warn(update, context):
     if not await admin_only(update, context):
         return
-
     target = await get_target(update)
-
-    if not target:
-        await update.effective_message.reply_text(
-            "သတိပေးမယ့်သူရဲ့ Message ကို Reply လုပ်ပြီး /warn သုံးပါ။"
-        )
-        return
-
-    if target.is_bot:
-        await update.effective_message.reply_text(
-            "Bot ကို Warn လုပ်လို့မရပါဘူး။"
-        )
+    if not target or target.is_bot:
+        await update.effective_message.reply_text("သတိပေးမယ့်သူရဲ့ Message ကို Reply လုပ်ပါ။")
         return
 
     key = (update.effective_chat.id, target.id)
     warnings[key] = warnings.get(key, 0) + 1
-
     await update.effective_message.reply_text(
-        f"⚠️ {target.full_name} ကို Warn ပေးပြီးပါပြီ။\n"
-        f"Warn အရေအတွက်: {warnings[key]}"
+        f"⚠️ {target.full_name} ကို Warn ပေးပြီးပါပြီ။ (Warn: {warnings[key]})"
     )
 
 
 async def warnings_command(update, context):
     target = await get_target(update)
-
-    if target:
-        user_id = target.id
-    else:
-        user_id = update.effective_user.id
-
+    user_id = target.id if target else update.effective_user.id
     key = (update.effective_chat.id, user_id)
+    await update.effective_message.reply_text(f"⚠️ Warn အရေအတွက်: {warnings.get(key, 0)}")
 
-    await update.effective_message.reply_text(
-        f"⚠️ Warn အရေအတွက်: {warnings.get(key, 0)}"
-    )
-
-
-# =========================
-# BAN / UNBAN
-# =========================
 
 async def ban(update, context):
     if not await admin_only(update, context):
         return
-
     target = await get_target(update)
-
-    if not target:
-        await update.effective_message.reply_text(
-            "Ban လုပ်မယ့်သူရဲ့ Message ကို Reply လုပ်ပြီး /ban သုံးပါ။"
-        )
+    if not target or target.id == update.effective_user.id or target.is_bot:
+        await update.effective_message.reply_text("ဒီသူကို Ban လုပ်လို့မရပါ။")
         return
-
-    if target.id == update.effective_user.id or target.is_bot:
-        await update.effective_message.reply_text(
-            "ဒီသူကို Ban လုပ်လို့မရပါဘူး။"
-        )
-        return
-
     try:
-        member = await context.bot.get_chat_member(
-            update.effective_chat.id, target.id
-        )
-
-        if member.status in ("administrator", "creator"):
-            await update.effective_message.reply_text(
-                "Group Admin ကို ဒီ Command နဲ့ Ban မလုပ်နိုင်ပါဘူး။"
-            )
-            return
-
-        await context.bot.ban_chat_member(
-            update.effective_chat.id,
-            target.id,
-        )
-
-        await update.effective_message.reply_text(
-            f"🚫 {target.full_name} ကို Ban လုပ်ပြီးပါပြီ။"
-        )
-
+        await context.bot.ban_chat_member(update.effective_chat.id, target.id)
+        await update.effective_message.reply_text(f"🚫 {target.full_name} ကို Ban လိုက်ပါပြီ။")
     except Exception:
-        logger.exception("Ban error")
-        await update.effective_message.reply_text(
-            "Ban မလုပ်နိုင်ပါဘူး။ Bot ရဲ့ Admin Permission ကို စစ်ပါ။"
-        )
+        await update.effective_message.reply_text("Ban မအောင်မြင်ပါ။ Permission စစ်ပါ။")
 
 
 async def unban(update, context):
     if not await admin_only(update, context):
         return
-
     if not context.args:
-        await update.effective_message.reply_text(
-            "အသုံးပြုပုံ: /unban USER_ID"
-        )
+        await update.effective_message.reply_text("အသုံးပြုပုံ: /unban USER_ID")
         return
-
     try:
         user_id = int(context.args[0])
-
-        await context.bot.unban_chat_member(
-            update.effective_chat.id,
-            user_id,
-            only_if_banned=True,
-        )
-
-        await update.effective_message.reply_text(
-            f"✅ User ID {user_id} ကို Unban လုပ်ပြီးပါပြီ။"
-        )
-
-    except ValueError:
-        await update.effective_message.reply_text(
-            "USER_ID ကို ဂဏန်းနဲ့ ထည့်ပေးပါ။"
-        )
+        await context.bot.unban_chat_member(update.effective_chat.id, user_id, only_if_banned=True)
+        await update.effective_message.reply_text(f"✅ User ID {user_id} ကို Unban လုပ်ပြီးပါပြီ။")
     except Exception:
-        logger.exception("Unban error")
-        await update.effective_message.reply_text(
-            "Unban မလုပ်နိုင်ပါဘူး။ User ID နဲ့ Permission ကို စစ်ပါ။"
-        )
+        await update.effective_message.reply_text("Unban မအောင်မြင်ပါ။")
 
-
-# =========================
-# MUTE / UNMUTE
-# =========================
 
 async def mute(update, context):
     if not await admin_only(update, context):
         return
-
     target = await get_target(update)
-
-    if not target:
-        await update.effective_message.reply_text(
-            "Mute လုပ်မယ့်သူရဲ့ Message ကို Reply လုပ်ပြီး /mute သုံးပါ။"
-        )
+    if not target or target.id == update.effective_user.id or target.is_bot:
+        await update.effective_message.reply_text("ဒီသူကို Mute လုပ်လို့မရပါ။")
         return
-
-    if target.id == update.effective_user.id or target.is_bot:
-        await update.effective_message.reply_text(
-            "ဒီသူကို Mute လုပ်လို့မရပါဘူး။"
-        )
-        return
-
     try:
-        member = await context.bot.get_chat_member(
-            update.effective_chat.id, target.id
-        )
-
-        if member.status in ("administrator", "creator"):
-            await update.effective_message.reply_text(
-                "Group Admin ကို Mute မလုပ်နိုင်ပါဘူး။"
-            )
-            return
-
         await context.bot.restrict_chat_member(
             chat_id=update.effective_chat.id,
             user_id=target.id,
-            permissions=ChatPermissions(
-                can_send_messages=False,
-                can_send_audios=False,
-                can_send_documents=False,
-                can_send_photos=False,
-                can_send_videos=False,
-                can_send_video_notes=False,
-                can_send_voice_notes=False,
-                can_send_polls=False,
-                can_send_other_messages=False,
-                can_add_web_page_previews=False,
-            ),
+            permissions=ChatPermissions(can_send_messages=False),
         )
-
-        await update.effective_message.reply_text(
-            f"🔇 {target.full_name} ကို Mute လုပ်ပြီးပါပြီ။"
-        )
-
+        await update.effective_message.reply_text(f"🔇 {target.full_name} ကို Mute လုပ်ပြီးပါပြီ။")
     except Exception:
-        logger.exception("Mute error")
-        await update.effective_message.reply_text(
-            "Mute မလုပ်နိုင်ပါဘူး။ Bot Permission ကို စစ်ပါ။"
-        )
+        await update.effective_message.reply_text("Mute မအောင်မြင်ပါ။")
 
 
 async def unmute(update, context):
     if not await admin_only(update, context):
         return
-
     target = await get_target(update)
-
     if not target:
-        await update.effective_message.reply_text(
-            "Unmute လုပ်မယ့်သူရဲ့ Message ကို Reply လုပ်ပြီး /unmute သုံးပါ။"
-        )
+        await update.effective_message.reply_text("Unmute လုပ်မယ့်သူကို Reply လုပ်ပါ။")
         return
-
     try:
         await context.bot.restrict_chat_member(
             chat_id=update.effective_chat.id,
@@ -426,16 +246,9 @@ async def unmute(update, context):
                 can_add_web_page_previews=True,
             ),
         )
-
-        await update.effective_message.reply_text(
-            f"🔊 {target.full_name} ကို Unmute လုပ်ပြီးပါပြီ။"
-        )
-
+        await update.effective_message.reply_text(f"🔊 {target.full_name} ကို Unmute လုပ်ပြီးပါပြီ။")
     except Exception:
-        logger.exception("Unmute error")
-        await update.effective_message.reply_text(
-            "Unmute မလုပ်နိုင်ပါဘူး။ Bot Permission ကို စစ်ပါ။"
-        )
+        await update.effective_message.reply_text("Unmute မအောင်မြင်ပါ။")
 
 
 # =========================
@@ -446,19 +259,17 @@ def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN မသတ်မှတ်ရသေးပါ။")
 
+    os.makedirs("downloads", exist_ok=True)
+
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
-
     app.add_handler(CommandHandler("song", song))
-
     app.add_handler(CommandHandler("warn", warn))
     app.add_handler(CommandHandler("warnings", warnings_command))
-
     app.add_handler(CommandHandler("ban", ban))
     app.add_handler(CommandHandler("unban", unban))
-
     app.add_handler(CommandHandler("mute", mute))
     app.add_handler(CommandHandler("unmute", unmute))
 
