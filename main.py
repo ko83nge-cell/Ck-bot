@@ -1,12 +1,11 @@
 import os
 import telebot
+import yt_dlp
 
 TOKEN = "8824850208:AAGkmULcNJxWx-39-80r-8oJNtSc9g3bSTM"
 OWNER_ID = 8062359539
 
 bot = telebot.TeleBot(TOKEN)
-
-# Group ID များကို သိမ်းဆည်းရန် Set တစ်ခု
 joined_groups = set()
 
 
@@ -17,11 +16,12 @@ def send_welcome(message):
     bot.reply_to(message, "မင်္ဂလာပါ! Warning & Music Bot အဆင်သင့်ပါပြီ။")
   else:
     bot.reply_to(
-        message, "မင်္ဂလာပါ! ဤ Bot သည် Warning, Music နှင့် Broadcast များကို လုပ်ဆောင်ပေးနိုင်ပါသည်။"
+        message,
+        "မင်္ဂလာပါ! ဤ Bot သည် Warning, Music နှင့် Broadcast များကို လုပ်ဆောင်ပေးနိုင်ပါသည်။",
     )
 
 
-# Owner သီးသန့် ကြော်ငြာတင်ရန် Command (/broadcast [စာသား])
+# Owner သီးသန့် ကြော်ငြာတင်ရန် Command
 @bot.message_handler(commands=["broadcast"])
 def broadcast_ads(message):
   if message.from_user.id != OWNER_ID:
@@ -48,14 +48,65 @@ def broadcast_ads(message):
   bot.reply_to(message, f"✅ ကြော်ငြာကို Group {success_count} ခုသို့ အောင်မြင်စွာ ပို့ပြီးပါပြီ။")
 
 
-# သီချင်းရှာဖွေရန်
+# YouTube မှ သီချင်းရှာဖွေပြီး အသံဖိုင် (Audio) ပို့ပေးရန်
 @bot.message_handler(commands=["song"])
-def get_song(message):
+def download_and_send_song(message):
   song_name = message.text.replace("/song", "").strip()
   if not song_name:
     bot.reply_to(message, "⚠️ ကျေးဇူးပြု၍ ရှာလိုသည့် သီချင်းနာမည် ထည့်ပါ (ဥပမာ: /song My Way)")
     return
-  bot.reply_to(message, f"🔍 '{song_name}' ကို ရှာဖွေနေပါပြီ...")
+
+  processing_msg = bot.reply_to(
+      message, f"🔍 '{song_name}' ကို ရှာဖွေပြီး ဒေါင်းလုပ်လုပ်နေပါပြီ..."
+  )
+
+  audio_file = None
+  try:
+    # yt-dlp ဖြင့် YouTube မှ အသံဖိုင်ကို ရှာဖွေ ಡေါင်းလုပ်ဆွဲခြင်း
+    ydl_opts = {
+        "format": "bestaudio/best",
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        }],
+        "outtmpl": "song_audio",
+        "default_search": "ytsearch1",
+        "noplaylist": True,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+      info = ydl.extract_info(song_name, download=True)
+      if "entries" in info:
+        info = info["entries"][0]
+
+      title = info.get("title", song_name)
+      audio_file = "song_audio.mp3"
+
+    # Telegram သို့ အသံဖိုင် ပို့ပေးခြင်း
+    with open(audio_file, "rb") as audio:
+      bot.send_audio(
+          message.chat.id,
+          audio,
+          title=title,
+          performer="Music Bot",
+          reply_to_message_id=message.message_id,
+      )
+
+    # ယာယီ ပို့ပြီးသား မက်ဆေ့ချ်ကို ဖျက်ခြင်း
+    bot.delete_message(message.chat.id, processing_msg.message_id)
+
+  except Exception as e:
+    bot.edit_message_text(
+        f"❌ သီချင်းရှာဖွေရာတွင် အမှားဖြစ်ပွားပါသည်: {e}",
+        message.chat.id,
+        processing_msg.message_id,
+    )
+
+  finally:
+    # ဖိုင်တွဲထဲမှ ယာယီသိမ်းထားသော အသံဖိုင်ကို ဖျက်ရန်
+    if audio_file and os.path.exists(audio_file):
+      os.remove(audio_file)
 
 
 # Warning Commands
@@ -84,4 +135,4 @@ def ban_user(message):
 
 print("Bot is running...")
 bot.infinity_polling()
-                               
+  
