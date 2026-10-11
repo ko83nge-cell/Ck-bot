@@ -1,7 +1,7 @@
 import os
 import io
 import logging
-import asyncio
+import requests
 from telegram import Update, ChatPermissions
 from telegram.ext import (
     Application,
@@ -63,8 +63,8 @@ async def admin_only(update, context):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "မင်္ဂလာပါ! 🤖\n\n"
-        "YouTube Music & Group Management Bot ပါ။\n\n"
-        "/song သီချင်းနာမည် - YouTube မှ သီချင်းရှာပြီး ပို့ရန်\n"
+        "Music & Group Management Bot ပါ။\n\n"
+        "/song သီချင်းနာမည် - သီချင်းရှာပြီး ပို့ရန်\n"
         "/help - Command အားလုံးကြည့်ရန်"
     )
 
@@ -84,7 +84,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================
-# YOUTUBE MUSIC SEARCH & DOWNLOAD
+# MUSIC SEARCH & DOWNLOAD
 # =========================
 
 async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -98,44 +98,50 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     query = " ".join(context.args)
-    status = await message.reply_text(f"🔎 YouTube မှ '{query}' ကို ရှာဖွေနေပါတယ်...")
+    status = await message.reply_text(f"🔎 '{query}' ကို ရှာဖွေနေပါတယ်...")
 
     audio_path = None
     try:
-        def download_audio():
-            ydl_opts = {
-                'format': 'bestaudio/best',
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-                'outtmpl': 'downloads/%(id)s.%(ext)s',
-                'quiet': True,
-                'no_warnings': True,
-                'default_search': 'ytsearch1',
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android', 'web']
-                    }
-                },
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                }
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(f"ytsearch1:{query}", download=True)
-                if 'entries' in info:
-                    info = info['entries'][0]
-                filename = ydl.prepare_filename(info)
-                audio_file = os.path.splitext(filename)[0] + '.mp3'
-                return audio_file, info.get('title', 'Unknown Title'), info.get('uploader', 'Unknown Artist')
+        # Invidious API သုံးပြီး YouTube ဗီဒီယိုလင့်ခ် ရှာမည် (Bot Detection ကို ရှောင်ရှားရန်)
+        search_url = f"https://invidious.jing.rocks/api/v1/search?q={query}&type=video"
+        res = requests.get(search_url, timeout=15)
+        
+        if res.status_code != 200:
+            # အကယ်၍ 1 ခုမရရင် အခြား Public Invidious instance သို့ ပြောင်းမည်
+            search_url = f"https://inv.nadeko.net/api/v1/search?q={query}&type=video"
+            res = requests.get(search_url, timeout=15)
 
-        loop = asyncio.get_running_loop()
-        audio_path, title, artist = await loop.run_in_executor(None, download_audio)
+        results = res.json()
+        if not results:
+            await status.edit_text("❌ သီချင်း ရှာမတွေ့ပါ။ အခြားနာမည်ဖြင့် ထပ်ရှာကြည့်ပါ။")
+            return
+
+        video_id = results[0]['videoId']
+        title = results[0].get('title', 'Unknown Title')
+        artist = results[0].get('author', 'Unknown Artist')
+        yt_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        await status.edit_text("📥 သီချင်း ဒေါင်းလုဒ်လုပ်နေပါပြီ...")
+
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'outtmpl': 'downloads/%(id)s.%(ext)s',
+            'quiet': True,
+            'no_warnings': True,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(yt_url, download=True)
+            filename = ydl.prepare_filename(info)
+            audio_path = os.path.splitext(filename)[0] + '.mp3'
 
         if not audio_path or not os.path.exists(audio_path):
-            await status.edit_text("❌ သီချင်းဖိုင် ရှာမတွေ့ပါ။ အခြားနာမည်ဖြင့် ထပ်ရှာကြည့်ပါ။")
+            await status.edit_text("❌ သီချင်းဖိုင် ပြောင်းလဲ၍ မရပါ။")
             return
 
         await status.edit_text("🎵 သီချင်း ပို့နေပါပြီ...")
@@ -145,14 +151,14 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 audio=audio,
                 title=title,
                 performer=artist,
-                caption=f"🎵 {title}\n🎤 {artist}\nvia YouTube",
+                caption=f"🎵 {title}\n🎤 {artist}",
             )
 
         await status.delete()
 
     except Exception as e:
-        logger.exception("YouTube song download failed")
-        await status.edit_text(f"❌ Error: {str(e)[:100]}")
+        logger.exception("Song download failed")
+        await status.edit_text(f"❌ Error: သီချင်းရယူရာတွင် အခက်အခဲရှိနေပါသည်။")
 
     finally:
         if audio_path and os.path.exists(audio_path):
