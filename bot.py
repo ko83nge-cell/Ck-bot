@@ -133,7 +133,6 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "format": "json",
                 "search": query,
                 "limit": 10,
-                "track_type": "single albumtrack",
                 "audioformat": "mp31",
             },
             timeout=20,
@@ -143,24 +142,25 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         tracks = data.get("results", [])
 
-        # Only tracks with download permission
-        tracks = [
-            track for track in tracks
-            if track.get("audiodownload_allowed") is True
-            and track.get("audiodownload")
-        ]
-
         if not tracks:
             await status.edit_text(
-                "သီချင်း မတွေ့ပါဘူး၊ သို့မဟုတ် Download "
-                "ခွင့်ပြုထားတဲ့ သီချင်း မရှိပါဘူး。\n"
-                "အခြားနာမည်နဲ့ ထပ်ရှာကြည့်ပါ။"
+                f"🎵 '{query}' နှင့် ကိုက်ညီသော သီချင်း မတွေ့ပါ။"
             )
             return
 
-        # Try the first permitted result
-        track = tracks[0]
-        audio_url = track["audiodownload"]
+        track = None
+        audio_url = None
+
+        for t in tracks:
+            url = t.get("audio") or t.get("audiodownload")
+            if url:
+                track = t
+                audio_url = url
+                break
+
+        if not audio_url or not track:
+            await status.edit_text("❌ သီချင်းလင့်ခ် ရယူ၍ မရပါ။")
+            return
 
         audio_response = requests.get(
             audio_url,
@@ -169,36 +169,10 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         audio_response.raise_for_status()
 
-        content_length = int(
-            audio_response.headers.get("content-length", 0)
-        )
-
-        # Avoid downloading very large files
-        max_size = 45 * 1024 * 1024
-
-        if content_length > max_size:
-            await status.edit_text(
-                "ဒီသီချင်းဖိုင်က အရမ်းကြီးနေပါတယ်။"
-            )
-            return
-
         audio_data = io.BytesIO()
-        total_size = 0
-
         for chunk in audio_response.iter_content(64 * 1024):
-            if not chunk:
-                continue
-
-            total_size += len(chunk)
-
-            if total_size > max_size:
-                await status.edit_text(
-                    "သီချင်းဖိုင်က သတ်မှတ်ထားတဲ့ "
-                    "အရွယ်အစားထက် ကြီးနေပါတယ်။"
-                )
-                return
-
-            audio_data.write(chunk)
+            if chunk:
+                audio_data.write(chunk)
 
         audio_data.seek(0)
         audio_data.name = "song.mp3"
@@ -494,4 +468,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+
