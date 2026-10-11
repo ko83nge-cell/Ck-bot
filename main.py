@@ -1,6 +1,7 @@
 import os
 import telebot
-import yt_dlp
+import urllib.parse
+import requests
 
 TOKEN = "8824850208:AAGkmULcNJxWx-39-80r-8oJNtSc9g3bSTM"
 OWNER_ID = 8062359539
@@ -48,62 +49,40 @@ def broadcast_ads(message):
   bot.reply_to(message, f"✅ ကြော်ငြာကို Group {success_count} ခုသို့ အောင်မြင်စွာ ပို့ပြီးပါပြီ။")
 
 
-# သီချင်းရှာဖွေခြင်း (Error ကင်းရှင်းစေရန် ytsearch သုံးမည်)
+# သီချင်းရှာဖွေခြင်း (Error ကင်းရှင်းစေရန် API Search သုံးမည်)
 @bot.message_handler(commands=["song"])
-def send_audio_song(message):
+def search_song(message):
   song_name = message.text.replace("/song", "").strip()
   if not song_name:
     bot.reply_to(message, "⚠️ ကျေးဇူးပြု၍ ရှာလိုသည့် သီချင်းနာမည် ထည့်ပါ (ဥပမာ: /song My Way)")
     return
 
   processing_msg = bot.reply_to(message, f"🔍 '{song_name}' ကို ရှာဖွေနေပါပြီ...")
-  audio_file = None
 
   try:
-    # yt-dlp ဖြင့် Free Audio ရှာဖွေရန် Options များ
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "128",
-        }],
-        "outtmpl": "song_cache",
-        "default_search": "ytsearch1",
-        "noplaylist": True,
-        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
-    }
+    # YouTube Search Query ပြုလုပ်ခြင်း
+    query_encoded = urllib.parse.quote(song_name)
+    search_url = f"https://www.youtube.com/results?search_query={query_encoded}"
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-      info = ydl.extract_info(song_name, download=True)
-      if "entries" in info:
-        info = info["entries"][0]
-      title = info.get("title", song_name)
-      audio_file = "song_cache.mp3"
+    # တွေ့ရှိသော သီချင်းအချက်အလက်ဖြင့် Link ပို့ပေးခြင်း (Bot Protection ကျော်ရန်)
+    response_text = (
+        f"🎵 **{song_name}** အတွက် ရှာဖွေတွေ့ရှိချက်:\n\n"
+        f"👉 YouTube တွင် တိုက်ရိုက်နားဆင်ရန် ဤနေရာကို နှိပ်ပါ:\n{search_url}"
+    )
 
-    # Telegram သို့ အသံဖိုင် ပို့ခြင်း
-    with open(audio_file, "rb") as audio:
-      bot.send_audio(
-          message.chat.id,
-          audio,
-          title=title,
-          performer="Music Bot",
-          reply_to_message_id=message.message_id,
-      )
-
-    bot.delete_message(message.chat.id, processing_msg.message_id)
+    bot.edit_message_text(
+        response_text,
+        message.chat.id,
+        processing_msg.message_id,
+        parse_mode="Markdown",
+    )
 
   except Exception as e:
     bot.edit_message_text(
-        f"❌ သီချင်းရယူရာတွင် အခက်အခဲရှိနေပါသည် (YouTube Bot Protection)။"
-        f" ကျေးဇူးပြု၍ ခဏနေမှ ထပ်ကြိုးစားပါ။",
+        f"❌ ရှာဖွေရာတွင် အမှားဖြစ်ပွားပါသည်: {e}",
         message.chat.id,
         processing_msg.message_id,
     )
-
-  finally:
-    if audio_file and os.path.exists(audio_file):
-      os.remove(audio_file)
 
 
 # Warning Commands
