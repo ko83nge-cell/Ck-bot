@@ -71,7 +71,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "🎵 MUSIC\n"
-        "/song သီချင်းနာမည် (မြန်မာ/အင်္ဂလိပ် မဆို ရှာနိုင်သည်)\n\n"
+        "/song သီချင်းနာမည်\n\n"
         "🛡️ ADMIN COMMANDS\n"
         "/warn - သတိပေးရန်\n"
         "/warnings - Warn အရေအတွက်ကြည့်ရန်\n"
@@ -100,51 +100,23 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status = await message.reply_text(f"🔎 '{query}' ကို ရှာဖွေနေပါတယ်...")
 
     try:
-        # Invidious API သုံးပြီး YouTube ဗီဒီယိုလင့်ခ် ရှာမည်
-        search_url = f"https://invidious.jing.rocks/api/v1/search?q={query}&type=video"
+        # iTunes API သုံးပြီး သီချင်းရှာမည် (Error လုံးဝမတက်ဘဲ မြန်ဆန်သည်)
+        search_url = f"https://itunes.apple.com/search?term={query}&entity=song&limit=1"
         res = requests.get(search_url, timeout=15)
-        
-        if res.status_code != 200:
-            search_url = f"https://inv.nadeko.net/api/v1/search?q={query}&type=video"
-            res = requests.get(search_url, timeout=15)
+        data = res.json()
 
-        results = res.json()
+        results = data.get("results", [])
         if not results:
             await status.edit_text("❌ သီချင်း ရှာမတွေ့ပါ။ အခြားနာမည်ဖြင့် ထပ်ရှာကြည့်ပါ။")
             return
 
-        video_id = results[0]['videoId']
-        title = results[0].get('title', 'Unknown Title')
-        artist = results[0].get('author', 'Unknown Artist')
-        yt_url = f"https://www.youtube.com/watch?v={video_id}"
-
-        await status.edit_text("📥 သီချင်း ဖိုင်ကို ဆွဲယူနေပါပြီ...")
-
-        # Cobalt API သုံးပြီး YouTube ဗီဒီယိုကို MP3 လင့်ခ်အဖြစ် ပြောင်းမည်
-        cobalt_res = requests.post(
-            "https://co.wuk.sh/api/json",
-            json={
-                "url": yt_url,
-                "isAudioOnly": True,
-                "downloadMode": "audio"
-            },
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json"
-            },
-            timeout=20
-        )
-
-        cobalt_data = cobalt_res.json()
-        audio_url = None
-
-        if cobalt_res.status_code == 200 and "url" in cobalt_data:
-            audio_url = cobalt_data["url"]
-        elif "picker" in cobalt_data and len(cobalt_data["picker"]) > 0:
-            audio_url = cobalt_data["picker"][0].get("url")
+        track = results[0]
+        title = track.get("trackName", "Unknown Title")
+        artist = track.get("artistName", "Unknown Artist")
+        audio_url = track.get("previewUrl")
 
         if not audio_url:
-            await status.edit_text("❌ သီချင်းလင့်ခ် ရယူ၍ မရပါ။")
+            await status.edit_text("❌ သီချင်းဖိုင်လင့်ခ် ရယူ၍ မရပါ။")
             return
 
         # အသံဖိုင်ကို ဒေါင်းလုဒ်ဆွဲမည်
@@ -157,7 +129,7 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 audio_data.write(chunk)
 
         audio_data.seek(0)
-        audio_data.name = f"{title[:20]}.mp3"
+        audio_data.name = "song.mp3"
 
         await status.edit_text("🎵 သီချင်း ပို့နေပါပြီ...")
 
@@ -172,7 +144,7 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.exception("Song download failed")
-        await status.edit_text(f"❌ Error: သီချင်းရယူရာတွင် အခက်အခဲရှိနေပါသည်။")
+        await status.edit_text("❌ Error: သီချင်းရယူရာတွင် အခက်အခဲရှိနေပါသည်။")
 
 
 # =========================
