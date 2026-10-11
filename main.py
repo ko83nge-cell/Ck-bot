@@ -1,11 +1,13 @@
+
 import os
 import re
-import base64
 import sqlite3
 import logging
 import asyncio
 import tempfile
 import shutil
+import base64
+import binascii
 from pathlib import Path
 from collections import defaultdict
 
@@ -23,11 +25,12 @@ from telegram.ext import (
 )
 
 # =========================
-# CONFIG
+# CONFIGURATION
 # =========================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 OWNER_ID = int(os.getenv("OWNER_ID", "8062359539"))
+YOUTUBE_COOKIES_B64 = os.getenv("YOUTUBE_COOKIES_B64", "").strip()
 
 MAX_AUDIO_SIZE = 45 * 1024 * 1024
 SEARCH_RESULTS = 20
@@ -43,57 +46,6 @@ logger = logging.getLogger("CkHelpBot")
 
 download_semaphore = asyncio.Semaphore(2)
 user_locks = defaultdict(asyncio.Lock)
-
-
-# =========================
-# YOUTUBE COOKIES
-# =========================
-
-def write_cookies_file(folder):
-    """
-    Read cookies from Railway Variables.
-    Supports:
-      YOUTUBE_COOKIES_B64 = Base64 encoded cookies.txt
-      YOUTUBE_COOKIES = Base64 or raw Netscape cookies text
-
-    Never print cookie contents to logs.
-    """
-
-    value = (
-        os.getenv("YOUTUBE_COOKIES_B64", "").strip()
-        or os.getenv("YOUTUBE_COOKIES", "").strip()
-    )
-
-    if not value:
-        return None
-
-    if value.startswith("# Netscape HTTP Cookie File") or (
-        value.startswith("# HTTP Cookie File")
-    ):
-        cookie_text = value
-    else:
-        try:
-            decoded = base64.b64decode(value, validate=True)
-            cookie_text = decoded.decode("utf-8")
-        except Exception:
-            raise RuntimeError(
-                "YouTube Cookies Variable ကို စစ်ပါ။ "
-                "Base64 စာသား သို့မဟုတ် cookies.txt "
-                "Netscape format ဖြစ်ရပါမယ်။"
-            )
-
-    if not cookie_text.strip():
-        raise RuntimeError("YouTube Cookies ဖိုင် ဗလာဖြစ်နေပါတယ်။")
-
-    cookie_path = Path(folder) / "cookies.txt"
-    cookie_path.write_text(cookie_text.rstrip() + "\n", encoding="utf-8")
-
-    try:
-        cookie_path.chmod(0o600)
-    except OSError:
-        pass
-
-    return str(cookie_path)
 
 
 # =========================
@@ -185,8 +137,65 @@ async def get_target(update):
 
 
 def error_text(exc):
+    # Do not expose cookies, tokens, or environment variables.
     text = " ".join(str(exc).split())
-    return f"{type(exc).__name__}: {text[:300]}"
+    text = re.sub(
+        r"(?i)(cookie|authorization|token)\s*[:=]\s*\S+",
+        r"\1=[REDACTED]",
+        text,
+    )
+    return f"{type(exc).__name__}: {text[:350]}"
+
+
+def write_cookies(folder):
+    """
+    Decode YOUTUBE_COOKIES_B64 into a temporary cookies.txt.
+    The cookie file is removed automatically with the temp folder.
+    """
+    if not YOUTUBE_COOKIES_B64:
+        return None
+
+    try:
+        raw = base64.b64decode(
+            YOUTUBE_COOKIES_B64,
+            validate=True,
+        )
+        content = raw.decode("utf-8-sig")
+
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        raise RuntimeError(
+            "YOUTUBE_COOKIES_B64 ကို Base64 အဖြစ် ဖတ်မရပါ။ "
+            "Railway Variables ကို စစ်ပါ။"
+        )
+
+    if not (
+        content.startswith("# Netscape HTTP Cookie File")
+        or content.startswith("# HTTP Cookie File")
+        or content.startswith("# This is a generated file!")
+        or content.startswith("# Netscape")
+    ):
+        raise RuntimeError(
+            "Cookies ဖိုင်ပုံစံ မမှန်ပါ။ "
+            "Netscape cookies.txt ဖိုင်ကို အသုံးပြုပါ။"
+        )
+
+    if not re.search(
+        r"(?m)^(?:\.youtube\.com|youtube\.com|\#HttpOnly_\.youtube\.com)\s",
+        content,
+    ):
+        raise RuntimeError(
+            "Cookies ဖိုင်ထဲမှာ YouTube cookies မတွေ့ပါ။ "
+            "မှန်ကန်တဲ့ cookies.txt ကို စစ်ပါ။"
+        )
+
+    cookie_path = Path(folder) / "cookies.txt"
+    cookie_path.write_text(content, encoding="utf-8")
+    try:
+        cookie_path.chmod(0o600)
+    except OSError:
+        pass
+
+    return str(cookie_path)
 
 
 # =========================
@@ -212,12 +221,12 @@ async def help_command(update, context):
         "/help - အကူအညီ\n"
         "/song သီချင်းအမည် - သီချင်းရှာရန်\n\n"
         "🛡️ Group Admin Commands\n"
-        "/warn - Reply လုပ်ပြီး Warning ပေးရန်\n"
+        "/warn - Reply လုပ်ထားသူကို Warning ပေးရန်\n"
         "/warnings - Warning ကြည့်ရန်\n"
-        "/ban - Reply လုပ်ပြီး Ban လုပ်ရန်\n"
+        "/ban - Reply လုပ်ထားသူကို Ban လုပ်ရန်\n"
         "/unban USER_ID - Unban လုပ်ရန်\n"
-        "/mute - Reply လုပ်ပြီး Mute လုပ်ရန်\n"
-        "/unmute - Reply လုပ်ပြီး Unmute လုပ်ရန်"
+        "/mute - Reply လုပ်ထားသူကို Mute လုပ်ရန်\n"
+        "/unmute - Reply လုပ်ထားသူကို Unmute လုပ်ရန်"
     )
 
 
@@ -232,8 +241,8 @@ def search_songs(search_text):
         "extract_flat": True,
         "skip_download": True,
         "noplaylist": True,
-        "socket_timeout": 20,
-        "retries": 1,
+        "socket_timeout": 25,
+        "retries": 2,
     }
 
     with yt_dlp.YoutubeDL(options) as ydl:
@@ -250,7 +259,9 @@ def search_songs(search_text):
         if not video_id:
             continue
 
-        if not re.fullmatch(r"[A-Za-z0-9_-]{6,20}", str(video_id)):
+        if not re.fullmatch(
+            r"[A-Za-z0-9_-]{6,20}", str(video_id)
+        ):
             continue
 
         songs.append({
@@ -265,8 +276,7 @@ def song_keyboard(songs, offset=0):
     buttons = []
 
     for index in range(
-        offset,
-        min(offset + PAGE_SIZE, len(songs)),
+        offset, min(offset + PAGE_SIZE, len(songs))
     ):
         title = songs[index]["title"][:45]
 
@@ -280,29 +290,22 @@ def song_keyboard(songs, offset=0):
     nav = []
 
     if offset > 0:
-        nav.append(
-            InlineKeyboardButton(
-                "⬅️ အရင်",
-                callback_data=f"page:{max(0, offset - PAGE_SIZE)}",
-            )
-        )
+        nav.append(InlineKeyboardButton(
+            "⬅️ အရင်",
+            callback_data=f"page:{max(0, offset - PAGE_SIZE)}",
+        ))
 
     if offset + PAGE_SIZE < len(songs):
-        nav.append(
-            InlineKeyboardButton(
-                "နောက်ထပ် ➡️",
-                callback_data=f"page:{offset + PAGE_SIZE}",
-            )
-        )
+        nav.append(InlineKeyboardButton(
+            "နောက်ထပ် ➡️",
+            callback_data=f"page:{offset + PAGE_SIZE}",
+        ))
 
     if nav:
         buttons.append(nav)
 
     buttons.append([
-        InlineKeyboardButton(
-            "❌ ပိတ်ရန်",
-            callback_data="close",
-        )
+        InlineKeyboardButton("❌ ပိတ်ရန်", callback_data="close")
     ])
 
     return InlineKeyboardMarkup(buttons)
@@ -329,14 +332,11 @@ async def song(update, context):
 
     try:
         songs = await asyncio.to_thread(
-            search_songs,
-            search_text,
+            search_songs, search_text
         )
 
         if not songs:
-            await status.edit_text(
-                "❌ သီချင်းမတွေ့ပါ။ နောက်တစ်ကြိမ် ပြန်ရှာကြည့်ပါ။"
-            )
+            await status.edit_text("❌ သီချင်းမတွေ့ပါ။")
             return
 
         context.user_data["songs"] = songs
@@ -356,15 +356,16 @@ async def song(update, context):
 
 
 # =========================
-# DOWNLOAD AUDIO
+# AUDIO DOWNLOAD
 # =========================
 
 def download_song(video_id, folder):
     if not shutil.which("ffmpeg"):
         raise RuntimeError(
-            "FFmpeg မတွေ့ပါ။ Railway Build Configuration ကို စစ်ပါ။"
+            "FFmpeg မတွေ့ပါ။ Railway Dockerfile ကို စစ်ပါ။"
         )
 
+    cookie_path = write_cookies(folder)
     output = str(Path(folder) / "audio.%(ext)s")
 
     options = {
@@ -373,17 +374,18 @@ def download_song(video_id, folder):
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        "socket_timeout": 30,
-        "retries": 2,
+        "socket_timeout": 35,
+        "retries": 3,
+        "fragment_retries": 3,
+        "file_access_retries": 2,
         "max_filesize": MAX_AUDIO_SIZE,
+        "cachedir": False,
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
             "preferredquality": "192",
         }],
     }
-
-    cookie_path = write_cookies_file(folder)
 
     if cookie_path:
         options["cookiefile"] = cookie_path
@@ -397,7 +399,7 @@ def download_song(video_id, folder):
 
     if not audio_path.exists():
         raise RuntimeError(
-            "MP3 ဖိုင် မဖန်တီးနိုင်ပါ။ FFmpeg ကို စစ်ပါ။"
+            "MP3 ဖိုင် မဖန်တီးနိုင်ပါ။ FFmpeg နဲ့ yt-dlp ကို စစ်ပါ။"
         )
 
     if audio_path.stat().st_size > MAX_AUDIO_SIZE:
@@ -440,11 +442,7 @@ async def song_callback(update, context):
         try:
             offset = int(data.split(":", 1)[1])
 
-            if (
-                offset < 0
-                or offset >= len(songs)
-                or offset % PAGE_SIZE != 0
-            ):
+            if offset < 0 or offset >= len(songs):
                 raise ValueError
 
             await query.answer()
@@ -452,13 +450,11 @@ async def song_callback(update, context):
                 "🎵 သီချင်းစာရင်း",
                 reply_markup=song_keyboard(songs, offset),
             )
-
         except Exception:
             await query.answer(
                 "စာရင်းသက်တမ်းကုန်သွားပါပြီ။",
                 show_alert=True,
             )
-
         return
 
     if not data.startswith("pick:"):
@@ -475,17 +471,16 @@ async def song_callback(update, context):
         )
         return
 
+    await query.answer()
+
     user_id = query.from_user.id
     lock = user_locks[user_id]
 
     if lock.locked():
-        await query.answer(
-            "⏳ Audio တစ်ခု ရယူနေပြီးသားပါ။ ခဏစောင့်ပါ။",
-            show_alert=True,
+        await query.message.reply_text(
+            "⏳ Audio တစ်ခု ရယူနေပြီးသားပါ။ ခဏစောင့်ပါ။"
         )
         return
-
-    await query.answer()
 
     await query.edit_message_text(
         "⏳ Audio ပြင်ဆင်နေပါတယ်။\n"
@@ -510,8 +505,8 @@ async def song_callback(update, context):
                             audio=audio,
                             title=title[:64],
                             performer=performer[:64],
-                            read_timeout=120,
-                            write_timeout=120,
+                            read_timeout=180,
+                            write_timeout=180,
                             connect_timeout=30,
                             pool_timeout=30,
                         )
@@ -523,22 +518,42 @@ async def song_callback(update, context):
         except Exception as exc:
             logger.exception("Audio download/send failed")
 
-            message = (
-                "❌ Audio ရယူမရပါ။\n\n"
-                + error_text(exc)
-            )
+            message = "❌ Audio ရယူမရပါ။\n\n"
 
-            if "Sign in to confirm" in str(exc):
+            error = str(exc).lower()
+
+            if (
+                "page needs to be reloaded" in error
+                or "unable to extract" in error
+                or "nsig extraction failed" in error
+            ):
                 message += (
-                    "\n\nYouTube က ဝင်ရောက်ခွင့်ကို ကန့်သတ်ထားပါတယ်။ "
-                    "Cookies သက်တမ်းနဲ့ Railway Variable ကို စစ်ပါ။"
+                    "YouTube စာမျက်နှာကို yt-dlp က "
+                    "မဖတ်နိုင်သေးပါ။ yt-dlp ဗားရှင်းနဲ့ "
+                    "Railway Build ကို စစ်ပါ။"
                 )
 
-            elif "cookies" in str(exc).lower():
+            elif (
+                "sign in to confirm" in error
+                or "cookies" in error
+                or "login required" in error
+            ):
                 message += (
-                    "\n\nCookies Variable ကို စစ်ပါ။ "
-                    "Cookies ကို GitHub သို့မဟုတ် Chat ထဲ မပို့ပါနဲ့။"
+                    "YouTube က ဝင်ရောက်ခွင့်ကို "
+                    "ကန့်သတ်ထားပါတယ်။ Cookies ရဲ့ "
+                    "ပုံစံနဲ့ သက်တမ်းကို စစ်ပါ။ "
+                    "Cookies ရှိရုံနဲ့ အမြဲအလုပ်လုပ်မည် "
+                    "မဟုတ်ပါ။"
                 )
+
+            elif "ffmpeg" in error:
+                message += (
+                    "FFmpeg မရှိခြင်း သို့မဟုတ် "
+                    "FFmpeg ပြဿနာ ဖြစ်နိုင်ပါတယ်။"
+                )
+
+            else:
+                message += error_text(exc)
 
             await query.message.reply_text(message)
 
@@ -549,10 +564,7 @@ async def song_callback(update, context):
 
 async def warn(update, context):
     if not await is_admin(update, context):
-        await reply(
-            update,
-            "❌ Admin သာ အသုံးပြုနိုင်ပါတယ်။",
-        )
+        await reply(update, "❌ Admin သာ အသုံးပြုနိုင်ပါတယ်။")
         return
 
     target = await get_target(update)
@@ -582,13 +594,6 @@ async def warn(update, context):
 
 
 async def warnings_command(update, context):
-    if not await is_admin(update, context):
-        await reply(
-            update,
-            "❌ Admin သာ အသုံးပြုနိုင်ပါတယ်။",
-        )
-        return
-
     target = await get_target(update)
 
     if target:
@@ -609,10 +614,7 @@ async def warnings_command(update, context):
         user_id,
     )
 
-    await reply(
-        update,
-        f"⚠️ Warning အရေအတွက်: {count}",
-    )
+    await reply(update, f"⚠️ Warning အရေအတွက်: {count}")
 
 
 async def ban(update, context):
@@ -744,7 +746,7 @@ async def unmute(update, context):
 
 
 # =========================
-# STARTUP
+# ERROR HANDLER
 # =========================
 
 async def error_handler(update, context):
@@ -753,6 +755,10 @@ async def error_handler(update, context):
         exc_info=context.error,
     )
 
+
+# =========================
+# STARTUP
+# =========================
 
 def main():
     if not BOT_TOKEN:
@@ -768,31 +774,6 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("song", song))
 
-    app.add_handler(
-        CallbackQueryHandler(
-            song_callback,
-            pattern=r"^(pick:\d+|page:\d+|close)$",
-        )
-    )
-
-    app.add_handler(CommandHandler("warn", warn))
-    app.add_handler(
-        CommandHandler("warnings", warnings_command)
-    )
-    app.add_handler(CommandHandler("ban", ban))
-    app.add_handler(CommandHandler("unban", unban))
-    app.add_handler(CommandHandler("mute", mute))
-    app.add_handler(CommandHandler("unmute", unmute))
-
-    app.add_error_handler(error_handler)
-
-    logger.info("Ck_helpbot starting...")
-
-    app.run_polling(
-        allowed_updates=["message", "callback_query"],
-        drop_pending_updates=False,
-    )
-
-
-if __name__ == "__main__":
-    main()
+    app.add_handler(CallbackQueryHandler(
+        song_callback,
+        pattern=r"^(pi
