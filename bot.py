@@ -114,6 +114,14 @@ async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 'quiet': True,
                 'no_warnings': True,
                 'default_search': 'ytsearch1',
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'web']
+                    }
+                },
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(f"ytsearch1:{query}", download=True)
@@ -283,3 +291,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
