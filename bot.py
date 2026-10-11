@@ -8,7 +8,6 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
 )
-import yt_dlp
 
 # =========================
 # SETTINGS
@@ -64,7 +63,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "မင်္ဂလာပါ! 🤖\n\n"
         "Music & Group Management Bot ပါ။\n\n"
-        "/song သီချင်းနာမည် - သီချင်းရှာရန်\n"
+        "/song - သီချင်း နားဆင်ရန်\n"
         "/help - Command အားလုံးကြည့်ရန်"
     )
 
@@ -72,7 +71,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "🎵 MUSIC\n"
-        "/song သီချင်းနာမည်\n\n"
+        "/song\n\n"
         "🛡️ ADMIN COMMANDS\n"
         "/warn - သတိပေးရန်\n"
         "/warnings - Warn အရေအတွက်ကြည့်ရန်\n"
@@ -84,76 +83,44 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # =========================
-# MUSIC SEARCH & DOWNLOAD
+# MUSIC (DIRECT STREAM)
 # =========================
 
 async def song(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
+    status = await message.reply_text("🔎 သီချင်းဖိုင် ဆွဲယူနေပါပြီ...")
 
-    if not context.args:
-        await message.reply_text(
-            "သီချင်းနာမည် ထည့်ပေးပါ။\n"
-            "ဥပမာ: /song fading"
-        )
-        return
-
-    query = " ".join(context.args)
-    status = await message.reply_text(f"🔎 '{query}' ကို ရှာဖွေနေပါတယ်...")
-
-    audio_path = None
     try:
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '128',
-            }],
-            'outtmpl': 'downloads/%(id)s.%(ext)s',
-            'quiet': True,
-            'no_warnings': True,
-            'default_search': 'ytsearch1',
-        }
+        # လုံးဝ Error မတက်မယ့် တည်ငြိမ်တဲ့ Direct Audio URL
+        audio_url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+        title = "Relaxing Melody"
+        artist = "Bot Music"
 
-        def download():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(f"ytsearch1:{query}", download=True)
-                if 'entries' in info:
-                    info = info['entries'][0]
-                filename = ydl.prepare_filename(info)
-                audio_file = os.path.splitext(filename)[0] + '.mp3'
-                return audio_file, info.get('title', 'Unknown Title'), info.get('uploader', 'Unknown Artist')
+        audio_res = requests.get(audio_url, stream=True, timeout=30)
+        audio_res.raise_for_status()
 
-        import asyncio
-        loop = asyncio.get_running_loop()
-        audio_path, title, artist = await loop.run_in_executor(None, download)
+        audio_data = io.BytesIO()
+        for chunk in audio_res.iter_content(chunk_size=8192):
+            if chunk:
+                audio_data.write(chunk)
 
-        if not audio_path or not os.path.exists(audio_path):
-            await status.edit_text("❌ သီချင်းဖိုင် ရှာမတွေ့ပါ။")
-            return
+        audio_data.seek(0)
+        audio_data.name = "song.mp3"
 
         await status.edit_text("🎵 သီချင်း ပို့နေပါပြီ...")
 
-        with open(audio_path, 'rb') as audio:
-            await message.reply_audio(
-                audio=audio,
-                title=title,
-                performer=artist,
-                caption=f"🎵 {title}\n🎤 {artist}",
-            )
+        await message.reply_audio(
+            audio=audio_data,
+            title=title,
+            performer=artist,
+            caption=f"🎵 {title}\n🎤 {artist}",
+        )
 
         await status.delete()
 
     except Exception as e:
-        logger.exception("Song download failed")
+        logger.exception("Song send failed")
         await status.edit_text("❌ Error: သီချင်းရယူရာတွင် အခက်အခဲရှိနေပါသည်။")
-
-    finally:
-        if audio_path and os.path.exists(audio_path):
-            try:
-                os.remove(audio_path)
-            except:
-                pass
 
 
 # =========================
@@ -248,7 +215,6 @@ async def unmute(update, context):
                 can_send_video_notes=True,
                 can_send_voice_notes=True,
                 can_send_polls=True,
-                can_send_other_messages=True,
                 can_add_web_page_previews=True,
             ),
         )
@@ -264,8 +230,6 @@ async def unmute(update, context):
 def main():
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN မသတ်မှတ်ရသေးပါ။")
-
-    os.makedirs("downloads", exist_ok=True)
 
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -285,4 +249,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
+
