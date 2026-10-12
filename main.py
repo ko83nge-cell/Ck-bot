@@ -34,7 +34,7 @@ conn.commit()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
       "🤖 **Advanced History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် သူရဲကောင်းနာမည်ကို ရိုက်ထည့်ပါ (မြန်မာလို ဘာသာပြန်ပြမည်)။\n"
+      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် သူရဲကောင်းနာမည်ကို ရိုက်ထည့်ပါ (မြန်မာလို အလိုအလျောက် ဘာသာပြန်ပြမည်)။\n"
       "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
       "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
@@ -96,6 +96,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       title = data.get("title", query)
       
       if extract and "not found" not in extract.lower():
+        # Translate both title and extract to Burmese completely
         translated_title = translate_to_burmese(title)
         translated_extract = translate_to_burmese(extract)
         
@@ -201,7 +202,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Advanced Bot with Heroes & Translation is running...")
+  print("Advanced Bot with Full Burmese Translation is running...")
   app.run_polling()
 
 
