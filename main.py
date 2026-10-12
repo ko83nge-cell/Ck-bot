@@ -34,9 +34,8 @@ conn.commit()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
       "🤖 **Global History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် မည်သည့်ပုဂ္ဂိုလ်/သူရဲကောင်း၏ နာမည်ကိုမဆို ရိုက်ထည့်ပါ (အချက်အလက်အပြည့်အစုံ မြန်မာလို ဖော်ပြပေးမည်)။\n"
-      "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
-      "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
+      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** ကမ္ဘာ့နိုင်ငံ မည်သည့်နိုင်ငံမဆို ရိုက်ထည့်ပါ (နိုင်ငံအကြောင်းနှင့် သူရဲကောင်းများပါ မြန်မာလို တွဲလျက် ဖော်ပြပေးမည်)။\n"
+      "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
   )
 
@@ -65,7 +64,41 @@ def translate_to_burmese(text):
   return text
 
 
-# --- Robust Search Handler using Wikipedia Search API & Fallbacks ---
+# --- Comprehensive Global Country Heroes Mapping (Covering all major world countries) ---
+GLOBAL_COUNTRY_HEROES = {
+    "myanmar": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းမင်းတရား, ဘုရင့်နောင်, ကျန်စစ်သား, ဗိုလ်ချုပ်အောင်ဆန်း",
+    "burma": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းမင်းတရား, ဘုရင့်နောင်, ကျန်စစ်သား, ဗိုလ်ချုပ်အောင်ဆန်း",
+    "မြန်မာ": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းမင်းတရား, ဘုရင့်နောင်, ကျန်စစ်သား, ဗိုလ်ချုပ်အောင်ဆန်း",
+    "thailand": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** King Naresuan, King Taksin, King Rama I",
+    "ထိုင်း": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** King Naresuan, King Taksin",
+    "japan": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Oda Nobunaga, Miyamoto Musashi, Toyotomi Hideyoshi",
+    "ဂျပන්": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Oda Nobunaga, Miyamoto Musashi",
+    "united states": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** George Washington, Abraham Lincoln, Alexander Hamilton",
+    "usa": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** George Washington, Abraham Lincoln",
+    "ამေရိကန်": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** George Washington, Abraham Lincoln",
+    "united kingdom": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Winston Churchill, King Arthur, Alfred the Great",
+    "uk": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Winston Churchill, King Arthur",
+    "ဗြိတိန်": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Winston Churchill, King Arthur",
+    "china": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Qin Shi Huang, Yue Fei, Guan Yu, Confucius",
+    "တရုတ်": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Qin Shi Huang, Yue Fei, Guan Yu",
+    "france": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Joan of Arc, Napoleon Bonaparte, Charlemagne",
+    "ပြင်သစ်": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Joan of Arc, Napoleon Bonaparte",
+    "germany": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Otto von Bismarck, Frederick the Great",
+    "ဂျာမနီ": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Otto von Bismarck, Frederick the Great",
+    "russia": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Peter the Great, Alexander Nevsky, Georgy Zhukov",
+    "ရုရှား": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Peter the Great, Alexander Nevsky",
+    "india": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Mahatma Gandhi, Ashoka the Great, Chhatrapati Shivaji",
+    "အိန္ဒိယ": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Mahatma Gandhi, Ashoka the Great",
+    "vietnam": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Ho Chi Minh, General Vo Nguyen Giap, Tran Hung Dao",
+    "ဗီယက်နမ်": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Ho Chi Minh, Tran Hung Dao",
+    "italy": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Julius Caesar, Giuseppe Garibaldi, Augustus",
+    "အီတလီ": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Julius Caesar, Giuseppe Garibaldi",
+    "korea": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Admiral Yi Sun-sin, King Sejong the Great",
+    "ကိုရီးယား": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Admiral Yi Sun-sin, King Sejong the Great"
+}
+
+
+# --- Main Search Handler ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.message.text.strip()
   
@@ -84,10 +117,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
   headers = {"User-Agent": "Mozilla/5.0"}
 
-  # 1. Try English Wikipedia summary (best for global countries and figures)
-  wiki_url_en = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(search_query)}"
+  # 1. Fetch country/topic history from Wikipedia
+  wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(search_query)}"
   try:
-    response = requests.get(wiki_url_en, headers=headers)
+    response = requests.get(wiki_url, headers=headers)
     if response.status_code == 200:
       data = response.json()
       extract = data.get("extract")
@@ -97,36 +130,49 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         translated_title = translate_to_burmese(title)
         translated_extract = translate_to_burmese(extract)
         
-        reply_text = f"📚 **{translated_title} (သမိုင်း/အချက်အလက်)**\n\n{translated_extract}"
+        # Automatically attach heroes if the country matches our global list
+        heroes_info = ""
+        for key, heroes_list in GLOBAL_COUNTRY_HEROES.items():
+          if key in query_lower or key in search_query.lower():
+            heroes_info = f"\n\n{heroes_list}"
+            break
+
+        reply_text = f"📚 **{translated_title} (သမိုင်း/အချက်အလက်)**\n\n{translated_extract}{heroes_info}"
         await update.message.reply_text(reply_text, parse_mode="Markdown")
         return
   except Exception as e:
-    print(f"English Wikipedia API Error: {e}")
+    print(f"Wikipedia API Error: {e}")
 
-  # 2. Try Burmese Wikipedia using Search API to find the correct page title first
-  search_url = f"https://my.wikipedia.org/w/api.php?action=query&list=search&srsearch={requests.utils.quote(query)}&format=json"
+  # 2. OpenSearch fallback for other queries
+  opensearch_url = f"https://en.wikipedia.org/w/api.php?action=opensearch&search={requests.utils.quote(query)}&limit=1&namespace=0&format=json"
   try:
-    search_res = requests.get(search_url, headers=headers)
+    search_res = requests.get(opensearch_url, headers=headers)
     if search_res.status_code == 200:
       search_data = search_res.json()
-      search_results = search_data.get("query", {}).get("search", [])
-      
-      if search_results:
-        # Get the top matching page title
-        best_title = search_results[0].get("title")
-        
-        # Fetch summary of the best matching page from Burmese Wikipedia
-        summary_url = f"https://my.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(best_title)}"
-        sum_res = requests.get(summary_url, headers=headers)
+      if len(search_data) > 1 and search_data[1]:
+        matched_title = search_data[1][0]
+        wiki_url_os = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(matched_title)}"
+        sum_res = requests.get(wiki_url_os, headers=headers)
         if sum_res.status_code == 200:
-          sum_data = sum_res.json()
-          extract = sum_data.get("extract")
-          if extract:
-            reply_text = f"📚 **{best_title} (သမိုင်း/အချက်အလက်)**\n\n{extract}"
+          data = sum_res.json()
+          extract = data.get("extract")
+          title = data.get("title", matched_title)
+          
+          if extract and "not found" not in extract.lower():
+            translated_title = translate_to_burmese(title)
+            translated_extract = translate_to_burmese(extract)
+            
+            heroes_info = ""
+            for key, heroes_list in GLOBAL_COUNTRY_HEROES.items():
+              if key in query_lower or key in matched_title.lower():
+                heroes_info = f"\n\n{heroes_list}"
+                break
+
+            reply_text = f"📚 **{translated_title} (သမိုင်း/အချက်အလက်)**\n\n{translated_extract}{heroes_info}"
             await update.message.reply_text(reply_text, parse_mode="Markdown")
             return
   except Exception as e:
-    print(f"Burmese Wikipedia Search API Error: {e}")
+    print(f"OpenSearch API Error: {e}")
 
   # 3. Fallback to Movie Database
   await search_and_send_movie(update, context)
@@ -217,7 +263,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Robust Search Bot is running...")
+  print("Global Country & Heroes Bot is running...")
   app.run_polling()
 
 
