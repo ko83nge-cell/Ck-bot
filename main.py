@@ -34,7 +34,7 @@ conn.commit()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
       "🤖 **Auto History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် အကြောင်းအရာကို ရိုက်ထည့်ပါ (မြန်မာလို အလိုအလျောက် ဘာသာပြန်ပေးပါမည်)။\n"
+      "📚 **သမိုင်းအချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် အကြောင်းအရာကို ရိုက်ထည့်ပါ (သမိုင်းကြောင်းကို မြန်မာလို ဘာသာပြန်ပြပေးမည်)။\n"
       "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
       "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
@@ -46,7 +46,6 @@ def translate_to_burmese(text):
   if not text:
     return text
   try:
-    # Using free Google Translate API endpoint
     url = "https://translate.googleapis.com/translate_a/single"
     params = {
         "client": "gtx",
@@ -65,15 +64,16 @@ def translate_to_burmese(text):
   return text
 
 
-# --- 1. Combined Search: Wikipedia First (Translated to Burmese), then Movie Database ---
+# --- Combined Search: Wikipedia History First, then Movie Database ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.message.text.strip()
   
   if query.startswith("/"):
     return
 
-  # Step A: Check Wikipedia API for History/General Knowledge
-  wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
+  # Append 'history' to the query so Wikipedia focuses on historical background
+  history_query = f"{query} history"
+  wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(history_query)}"
   headers = {"User-Agent": "Mozilla/5.0"}
   
   try:
@@ -84,23 +84,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       title = data.get("title", query)
       
       if extract and "not found" not in extract.lower():
-        # Translate both title and extract to Burmese
         translated_title = translate_to_burmese(title)
         translated_extract = translate_to_burmese(extract)
         
         await update.message.reply_text(
-            f"📚 **{translated_title} (သမိုင်း/အချက်အလက်)**\n\n{translated_extract}",
+            f"📚 **{translated_title} (သမိုင်းကြောင်း)**\n\n{translated_extract}",
             parse_mode="Markdown",
         )
         return
   except Exception as e:
     print(f"Wikipedia API Error: {e}")
 
-  # Step B: If Wikipedia has no result, search in SQLite Movie Database
+  # Fallback to Movie Search Database if history not found
   await search_and_send_movie(update, context)
 
 
-# --- 2. Movie Bot Features ---
+# --- Movie Bot Features ---
 async def save_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_id = update.effective_user.id
   if ADMIN_IDS and user_id not in ADMIN_IDS:
@@ -148,7 +147,7 @@ async def search_and_send_movie(
 
   if not results:
     await update.message.reply_text(
-        "❌ တောင်းပန်ပါတယ်၊ Wikipedia တွင်လည်း မတွေ့ရှိပါ၊ ၎င်းအပြင် ရုပ်ရှင်ဒေတာဘေ့စ်ထဲတွင်လည်း အဆိုပါနာမည်နဲ့ ရုပ်ရှင်ကို ရှာမတွေ့ပါ။"
+        "❌ တောင်းပန်ပါတယ်၊ Wikipedia တွင်လည်း သမိုင်းအချက်အလက် မတွေ့ရှိပါ၊ ရုပ်ရှင်ဒေတာဘေ့စ်ထဲတွင်လည်း အဆိုပါနာမည်နဲ့ ရုပ်ရှင်ကို ရှာမတွေ့ပါ။"
     )
     return
 
@@ -185,7 +184,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Combined History & Burmese Translated Bot is running...")
+  print("Combined History & Movie Bot is running...")
   app.run_polling()
 
 
