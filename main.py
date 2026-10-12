@@ -65,7 +65,7 @@ def translate_to_burmese(text):
   return text
 
 
-# --- Pure Dynamic Search Handler (No Hardcoded Lists) ---
+# --- Robust Search Handler using Wikipedia Search API & Fallbacks ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.message.text.strip()
   
@@ -83,8 +83,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     search_query = query
 
   headers = {"User-Agent": "Mozilla/5.0"}
-  
-  # 1. Try English Wikipedia first for international queries and full context
+
+  # 1. Try English Wikipedia summary (best for global countries and figures)
   wiki_url_en = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(search_query)}"
   try:
     response = requests.get(wiki_url_en, headers=headers)
@@ -103,32 +103,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   except Exception as e:
     print(f"English Wikipedia API Error: {e}")
 
-  # 2. Try Burmese Wikipedia with full mobile-sections content to ensure complete history
-  mobile_url = f"https://my.wikipedia.org/api/rest_v1/page/mobile-sections/{requests.utils.quote(query)}"
+  # 2. Try Burmese Wikipedia using Search API to find the correct page title first
+  search_url = f"https://my.wikipedia.org/w/api.php?action=query&list=search&srsearch={requests.utils.quote(query)}&format=json"
   try:
-    mob_res = requests.get(mobile_url, headers=headers)
-    if mob_res.status_code == 200:
-      data = mob_res.json()
-      lead = data.get("lead", {})
-      title = lead.get("displaytitle", query)
-      lead_extract = lead.get("description", "")
+    search_res = requests.get(search_url, headers=headers)
+    if search_res.status_code == 200:
+      search_data = search_res.json()
+      search_results = search_data.get("query", {}).get("search", [])
       
-      # Collect paragraphs from sections for complete details
-      full_content = ""
-      sections = data.get("remaining", {}).get("sections", [])
-      for sec in sections:
-        text = sec.get("text", "")
-        import re
-        clean_text = re.sub('<[^<]+?>', '', text)
-        if clean_text:
-          full_content += "\n\n" + clean_text
-
-      if full_content or lead_extract:
-        reply_text = f"📚 **{title} (သမိုင်း/အချက်အလက်)**\n\n{lead_extract}\n{full_content[:3500]}"
-        await update.message.reply_text(reply_text, parse_mode="Markdown")
-        return
+      if search_results:
+        # Get the top matching page title
+        best_title = search_results[0].get("title")
+        
+        # Fetch summary of the best matching page from Burmese Wikipedia
+        summary_url = f"https://my.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(best_title)}"
+        sum_res = requests.get(summary_url, headers=headers)
+        if sum_res.status_code == 200:
+          sum_data = sum_res.json()
+          extract = sum_data.get("extract")
+          if extract:
+            reply_text = f"📚 **{best_title} (သမိုင်း/အချက်အလက်)**\n\n{extract}"
+            await update.message.reply_text(reply_text, parse_mode="Markdown")
+            return
   except Exception as e:
-    print(f"Burmese Wikipedia Mobile Sections Error: {e}")
+    print(f"Burmese Wikipedia Search API Error: {e}")
 
   # 3. Fallback to Movie Database
   await search_and_send_movie(update, context)
@@ -219,7 +217,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Pure Dynamic Bot is running...")
+  print("Robust Search Bot is running...")
   app.run_polling()
 
 
