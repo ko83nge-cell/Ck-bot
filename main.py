@@ -1,5 +1,6 @@
 import os
 import sqlite3
+import requests
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -16,6 +17,7 @@ ADMIN_IDS = [
     if uid.strip()
 ]
 
+# Database Setup for Movies
 conn = sqlite3.connect("movies_bot.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute("""
@@ -31,13 +33,46 @@ conn.commit()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
-      "🎬 **Auto Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "🔍 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပြီး ပို့လိုက်ပါ။ (ဥပမာ - `Avatar`)\n"
-      "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို ပို့ပါ။",
+      "🤖 **Auto History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
+      "📚 **သမိုင်းအချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် အကြောင်းအရာတစ်ခုကို ရိုက်ထည့်ပါ။ (ဥပမာ - `Myanmar` သို့မဟုတ် `Japan`)\n"
+      "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
+      "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
   )
 
 
+# --- 1. Combined Search: Wikipedia First, then Movie Database ---
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  query = update.message.text.strip()
+  
+  if query.startswith("/"):
+    return
+
+  # Step A: Check Wikipedia API for History/General Knowledge
+  url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
+  headers = {"User-Agent": "Mozilla/5.0"}
+  
+  try:
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+      data = response.json()
+      extract = data.get("extract")
+      title = data.get("title", query)
+      # If Wikipedia found a valid summary page, send it
+      if extract and "not found" not in extract.lower():
+        await update.message.reply_text(
+            f"📚 **{title} (သမိုင်း/အချက်အလက်)**\n\n{extract}",
+            parse_mode="Markdown",
+        )
+        return
+  except Exception as e:
+    print(f"Wikipedia API Error: {e}")
+
+  # Step B: If Wikipedia has no result, search in SQLite Movie Database
+  await search_and_send_movie(update, context)
+
+
+# --- 2. Movie Bot Features ---
 async def save_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_id = update.effective_user.id
   if ADMIN_IDS and user_id not in ADMIN_IDS:
@@ -77,9 +112,6 @@ async def search_and_send_movie(
 ):
   query = update.message.text.strip().lower()
 
-  if query.startswith("/"):
-    return
-
   cursor.execute(
       "SELECT title, file_id, caption FROM movies WHERE LOWER(title) LIKE ?",
       (f"%{query}%",),
@@ -88,7 +120,7 @@ async def search_and_send_movie(
 
   if not results:
     await update.message.reply_text(
-        "❌ တောင်းပန်ပါတယ်၊ အဆိုပါ နာမည်နဲ့ ရုပ်ရှင်ကို ရှာမတွေ့ပါ။"
+        "❌ တောင်းပန်ပါတယ်၊ Wikipedia တွင်လည်း မတွေ့ရှိပါ၊ ၎င်းအပြင် ရုပ်ရှင်ဒေတာဘေ့စ်ထဲတွင်လည်း အဆိုပါနာမည်နဲ့ ရုပ်ရှင်ကို ရှာမတွေ့ပါ။"
     )
     return
 
@@ -122,10 +154,10 @@ def main():
       MessageHandler(filters.VIDEO | filters.Document.ALL, save_movie)
   )
   app.add_handler(
-      MessageHandler(filters.TEXT & ~filters.COMMAND, search_and_send_movie)
+      MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Auto Movie Bot is running...")
+  print("Combined History & Movie Bot is running...")
   app.run_polling()
 
 
