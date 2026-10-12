@@ -34,7 +34,7 @@ conn.commit()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
       "🤖 **Global History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် မည်သည့်သူရဲကောင်း/ပုဂ္ဂိုလ်၏ နာမည်ကိုမဆို မြန်မာ/အင်္ဂလိပ် မဆို ရိုက်ထည့်နိုင်ပါသည်၊၊\n"
+      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် မည်သည့်ပုဂ္ဂိုလ်/သူရဲကောင်း၏ နာမည်ကိုမဆို ရိုက်ထည့်ပါ (အချက်အလက်အပြည့်အစုံ မြန်မာလို ဖော်ပြပေးမည်)။\n"
       "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
       "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
@@ -65,7 +65,7 @@ def translate_to_burmese(text):
   return text
 
 
-# --- Advanced Search Handler (English & Burmese Wikipedia Fallback) ---
+# --- Pure Dynamic Search Handler (No Hardcoded Lists) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.message.text.strip()
   
@@ -84,7 +84,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
   headers = {"User-Agent": "Mozilla/5.0"}
   
-  # 1. Try English Wikipedia first
+  # 1. Try English Wikipedia first for international queries and full context
   wiki_url_en = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(search_query)}"
   try:
     response = requests.get(wiki_url_en, headers=headers)
@@ -103,21 +103,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   except Exception as e:
     print(f"English Wikipedia API Error: {e}")
 
-  # 2. If not found in English, try Burmese Wikipedia directly (for Burmese terms like အလောင်းဘုရား, ဗိုလ်ချုပ်အောင်ဆန်း)
-  wiki_url_my = f"https://my.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
+  # 2. Try Burmese Wikipedia with full mobile-sections content to ensure complete history
+  mobile_url = f"https://my.wikipedia.org/api/rest_v1/page/mobile-sections/{requests.utils.quote(query)}"
   try:
-    response = requests.get(wiki_url_my, headers=headers)
-    if response.status_code == 200:
-      data = response.json()
-      extract = data.get("extract")
-      title = data.get("title", query)
+    mob_res = requests.get(mobile_url, headers=headers)
+    if mob_res.status_code == 200:
+      data = mob_res.json()
+      lead = data.get("lead", {})
+      title = lead.get("displaytitle", query)
+      lead_extract = lead.get("description", "")
       
-      if extract and "not found" not in extract.lower():
-        reply_text = f"📚 **{title} (သမိုင်း/အချက်အလက်)**\n\n{extract}"
+      # Collect paragraphs from sections for complete details
+      full_content = ""
+      sections = data.get("remaining", {}).get("sections", [])
+      for sec in sections:
+        text = sec.get("text", "")
+        import re
+        clean_text = re.sub('<[^<]+?>', '', text)
+        if clean_text:
+          full_content += "\n\n" + clean_text
+
+      if full_content or lead_extract:
+        reply_text = f"📚 **{title} (သမိုင်း/အချက်အလက်)**\n\n{lead_extract}\n{full_content[:3500]}"
         await update.message.reply_text(reply_text, parse_mode="Markdown")
         return
   except Exception as e:
-    print(f"Burmese Wikipedia API Error: {e}")
+    print(f"Burmese Wikipedia Mobile Sections Error: {e}")
 
   # 3. Fallback to Movie Database
   await search_and_send_movie(update, context)
@@ -208,7 +219,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Global Dual-Wiki Bot is running...")
+  print("Pure Dynamic Bot is running...")
   app.run_polling()
 
 
