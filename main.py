@@ -34,7 +34,7 @@ conn.commit()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
       "🤖 **Global History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** ကမ္ဘာ့နိုင်ငံ မည်သည့်နိုင်ငံမဆို သို့မဟုတ် ပုဂ္ဂိုလ်တစ်ဦးဦး၏ နာမည်ကို ရိုက်ထည့်ပါ (မြန်မာလို အလိုအလျောက် ဘာသာပြန်ပြမည်)။\n"
+      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် မည်သည့်သူရဲကောင်း/ပုဂ္ဂိုလ်၏ နာမည်ကိုမဆို မြန်မာ/အင်္ဂလိပ် မဆို ရိုက်ထည့်နိုင်ပါသည်၊၊\n"
       "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
       "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
@@ -46,7 +46,7 @@ def translate_to_burmese(text):
   if not text:
     return text
   try:
-    q_text = text[:1500]  # Take up to 1500 characters to prevent API errors
+    q_text = text[:1500]
     url = "https://translate.googleapis.com/translate_a/single"
     params = {
         "client": "gtx",
@@ -65,7 +65,7 @@ def translate_to_burmese(text):
   return text
 
 
-# --- Dynamic Search Handler for All Countries & Figures Worldwide ---
+# --- Advanced Search Handler (English & Burmese Wikipedia Fallback) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.message.text.strip()
   
@@ -73,8 +73,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return
 
   query_lower = query.lower()
-
-  # Handle common abbreviations or short forms
   if query_lower == "thai":
     search_query = "Thailand"
   elif query_lower == "usa":
@@ -84,19 +82,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   else:
     search_query = query
 
-  # Step A: Search Wikipedia API dynamically for ANY country or figure worldwide
-  wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(search_query)}"
   headers = {"User-Agent": "Mozilla/5.0"}
   
+  # 1. Try English Wikipedia first
+  wiki_url_en = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(search_query)}"
   try:
-    response = requests.get(wiki_url, headers=headers)
+    response = requests.get(wiki_url_en, headers=headers)
     if response.status_code == 200:
       data = response.json()
       extract = data.get("extract")
       title = data.get("title", query)
       
       if extract and "not found" not in extract.lower():
-        # Translate title and extract dynamically to Burmese
         translated_title = translate_to_burmese(title)
         translated_extract = translate_to_burmese(extract)
         
@@ -104,9 +101,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply_text, parse_mode="Markdown")
         return
   except Exception as e:
-    print(f"Wikipedia API Error: {e}")
+    print(f"English Wikipedia API Error: {e}")
 
-  # Step B: If not found on Wikipedia, search in SQLite Movie Database
+  # 2. If not found in English, try Burmese Wikipedia directly (for Burmese terms like အလောင်းဘုရား, ဗိုလ်ချုပ်အောင်ဆန်း)
+  wiki_url_my = f"https://my.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
+  try:
+    response = requests.get(wiki_url_my, headers=headers)
+    if response.status_code == 200:
+      data = response.json()
+      extract = data.get("extract")
+      title = data.get("title", query)
+      
+      if extract and "not found" not in extract.lower():
+        reply_text = f"📚 **{title} (သမိုင်း/အချက်အလက်)**\n\n{extract}"
+        await update.message.reply_text(reply_text, parse_mode="Markdown")
+        return
+  except Exception as e:
+    print(f"Burmese Wikipedia API Error: {e}")
+
+  # 3. Fallback to Movie Database
   await search_and_send_movie(update, context)
 
 
@@ -195,7 +208,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Global Dynamic Translated Bot is running...")
+  print("Global Dual-Wiki Bot is running...")
   app.run_polling()
 
 
