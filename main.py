@@ -34,34 +34,44 @@ conn.commit()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
       "🤖 **Advanced History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် သူရဲကောင်းနာမည်ကို ရိုက်ထည့်ပါ။\n"
+      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် (သို့) သူရဲကောင်းနာမည်ကို ရိုက်ထည့်ပါ (မြန်မာလို အပြည့်အစုံ ဖော်ပြပေးမည်)။\n"
       "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
       "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
   )
 
 
-# --- Burmese History Data Mapping for Countries and Heroes ---
+# --- Complete Burmese Database for Countries and Heroes ---
 BURMESE_DATABASE = {
     "myanmar": {
         "title": "မြန်မာနိုင်ငံ (သမိုင်း/အချက်အလက်)",
         "extract": "မြန်မာနိုင်ငံ (တရားဝင်အမည်: ပြည်ထောင်စု သမ္မတ မြန်မာနိုင်ငံတော်) သည် အရှေ့တောင်အာရှတွင် တည်ရှိသော နိုင်ငံတစ်နိုင်ငံ ဖြစ်သည်။ နယ်နမိတ်အားဖြင့် အိန္ဒိယ၊ ဘင်္ဂလားဒေ့ရှ်၊ တရုတ်၊ လာအိုနှင့် ထိုင်းနိုင်ငံတို့နှင့် ထိစပ်နေသည်။ မြို့တော်မှာ နေပြည်တော် ဖြစ်ပြီး စီးပွားရေးမြို့တော်မှာ ရန်ကုန်မြို့ ဖြစ်သည်။",
-        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းဘုရား, ဘုရင့်နောင်, ကျန်စစ်သား, ဗိုလ်ချုပ်အောင်ဆန်း"
+        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းဘုရား (Alaungpaya), ဘုရင့်နောင် (Bayinnaung), ကျန်စစ်သား (Kyanzittha), ဗိုလ်ချုပ်အောင်ဆန်း (General Aung San)"
     },
     "မြန်မာ": {
         "title": "မြန်မာနိုင်ငံ (သမိုင်း/အချက်အလက်)",
         "extract": "မြန်မာနိုင်ငံ (တရားဝင်အမည်: ပြည်ထောင်စု သမ္မတ မြန်မာနိုင်ငံတော်) သည် အရှေ့တောင်အာရှတွင် တည်ရှိသော နိုင်ငံတစ်နိုင်ငံ ဖြစ်သည်။ နယ်နမိတ်အားဖြင့် အိန္ဒိယ၊ ဘင်္ဂလားဒေ့ရှ်၊ တရုတ်၊ လာအိုနှင့် ထိုင်းနိုင်ငံတို့နှင့် ထိစပ်နေသည်။ မြို့တော်မှာ နေပြည်တော် ဖြစ်ပြီး စီးပွားရေးမြို့တော်မှာ ရန်ကုန်မြို့ ဖြစ်သည်။",
-        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းဘုရား, ဘုရင့်နောင်, ကျန်စစ်သား, ဗိုလ်ချုပ်အောင်ဆန်း"
+        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းဘုရား (Alaungpaya), ဘုရင့်နောင် (Bayinnaung), ကျန်စစ်သား (Kyanzittha), ဗိုလ်ချုပ်အောင်ဆန်း (General Aung San)"
     },
     "thailand": {
         "title": "ထိုင်းနိုင်ငံ (သမိုင်း/အချက်အလက်)",
         "extract": "ထိုင်းနိုင်ငံသည် အရှေ့တောင်အာရှ အလယ်ပိုင်းတွင် တည်ရှိသော နိုင်ငံတစ်ခု ဖြစ်သည်။ ယခင်က ဆยาม (Siam) ဟု ခေါ်ဆိုခဲ့ကြသည်။ မြို့တော်မှာ ဘန်က็อกမြို့ ဖြစ်သည်။",
-        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** King Naresuan, King Taksin"
+        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** King Naresuan (នរេសូរ), King Taksin (ตากสิน)"
     },
     "ထိုင်း": {
         "title": "ထိုင်းနိုင်ငံ (သမိုင်း/အချက်အလက်)",
         "extract": "ထိုင်းနိုင်ငံသည် အရှေ့တောင်အာရှ အလယ်ပိုင်းတွင် တည်ရှိသော နိုင်ငံတစ်ခု ဖြစ်သည်။ ယခင်က ဆยาม (Siam) ဟု ခေါ်ဆိုခဲ့ကြသည်။ မြို့တော်မှာ ဘန်က็อกမြို့ ဖြစ်သည်။",
         "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** King Naresuan, King Taksin"
+    },
+    "japan": {
+        "title": "ဂျပန်နိုင်ငံ (သမိုင်း/အချက်အလက်)",
+        "extract": "ဂျပန်နိုင်ငံသည် အရှေ့အာရှတွင် တည်ရှိသော ကျွန်းနိုင်ငံတစ်ခု ဖြစ်သည်။ တိုကျိုမြို့သည် နိုင်ငံ၏ မြို့တော် ဖြစ်သည်။",
+        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Oda Nobunaga, Miyamoto Musashi"
+    },
+    "ဂျပန်": {
+        "title": "ဂျပန်နိုင်ငံ (သမိုင်း/အချက်အလက်)",
+        "extract": "ဂျပန်နိုင်ငံသည် အရှေ့အာရှတွင် တည်ရှိသော ကျွန်းနိုင်ငံတစ်ခု ဖြစ်သည်။ တိုကျိုမြို့သည် နိုင်ငံ၏ မြို့တော် ဖြစ်သည်။",
+        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Oda Nobunaga, Miyamoto Musashi"
     },
     "alaungpaya": {
         "title": "အလောင်းဘုရား (သမိုင်းအချက်အလက်)",
@@ -93,7 +103,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   if query.startswith("/"):
     return
 
-  # Check if query matches our Burmese Database
+  # 1. Check in local Burmese Database first
   if query in BURMESE_DATABASE:
     item = BURMESE_DATABASE[query]
     reply_text = f"📚 **{item['title']}**\n\n{item['extract']}"
@@ -102,25 +112,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(reply_text, parse_mode="Markdown")
     return
 
-  # Fallback to Wikipedia API if not in local database
-  wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
-  headers = {"User-Agent": "Mozilla/5.0"}
-  
-  try:
-    response = requests.get(wiki_url, headers=headers)
-    if response.status_code == 200:
-      data = response.json()
-      extract = data.get("extract")
-      title = data.get("title", query)
-      
-      if extract and "not found" not in extract.lower():
-        reply_text = f"📚 **{title} (သမိုင်း/အချက်အလက်)**\n\n{extract}"
-        await update.message.reply_text(reply_text, parse_mode="Markdown")
-        return
-  except Exception as e:
-    print(f"Wikipedia API Error: {e}")
-
-  # Fallback to Movie Database
+  # 2. Fallback to Movie Database
   await search_and_send_movie(update, context)
 
 
@@ -209,7 +201,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Bot with Burmese Mapping is running...")
+  print("Advanced Burmese Bot is running...")
   app.run_polling()
 
 
