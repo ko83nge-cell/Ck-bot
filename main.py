@@ -71,7 +71,7 @@ COUNTRY_HEROES = {
     "thailand": "ထင်ရှားသော သူရဲကောင်းများ: King Naresuan, King Taksin",
     "ထိုင်း": "ထင်ရှားသော သူရဲကောင်းများ: King Naresuan, King Taksin",
     "japan": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga, Miyamoto Musashi",
-    "ဂျပන්": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga, Miyamoto Musashi"
+    "ဂျပန်": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga, Miyamoto Musashi"
 }
 
 
@@ -96,7 +96,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       title = data.get("title", query)
       
       if extract and "not found" not in extract.lower():
-        # Translate both title and extract to Burmese completely
+        # *** ဤနေရာတွင် translate_to_burmese ကို အသေအချာ ခေါ်သုံးပေးထားပါသည် ***
         translated_title = translate_to_burmese(title)
         translated_extract = translate_to_burmese(extract)
         
