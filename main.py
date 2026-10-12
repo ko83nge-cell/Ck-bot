@@ -34,7 +34,7 @@ conn.commit()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
       "🤖 **Advanced History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **နိုင်ငံ သို့မဟုတ် သူရဲကောင်းများ ရှာရန်:** နိုင်ငံအမည် (သို့) ထင်ရှားသော သူရဲကောင်းနာမည်ကို အင်္ဂလိပ်/မြန်မာ မဆို ရိုက်ထည့်နိုင်ပါသည် (မြန်မာလို အလိုအလျောက် ဘာသာပြန်ပြမည်)။\n"
+      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် သူရဲကောင်းနာမည်ကို ရိုက်ထည့်ပါ (မြန်မာလို ဘာသာပြန်ပြမည်)။\n"
       "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
       "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
@@ -64,14 +64,14 @@ def translate_to_burmese(text):
   return text
 
 
-# --- Predefined Country Heroes Data (English & Burmese mapping) ---
+# --- Predefined Country Heroes Data ---
 COUNTRY_HEROES = {
     "myanmar": "ထင်ရှားသော သူရဲကောင်းများ: အလောင်းဘုရား (Alaungpaya), ဘုရင့်နောင် (Bayinnaung), ကျန်စစ်သား (Kyanzittha), ဗိုလ်ချုပ်အောင်ဆန်း (General Aung San)",
     "မြန်မာ": "ထင်ရှားသော သူရဲကောင်းများ: အလောင်းဘုရား (Alaungpaya), ဘုရင့်နောင် (Bayinnaung), ကျန်စစ်သား (Kyanzittha), ဗိုလ်ချုပ်အောင်ဆန်း (General Aung San)",
-    "thailand": "ထင်ရှားသော သူရဲကောင်းများ: King Naresuan (នเรศวร), King Taksin (ตากสิน)",
+    "thailand": "ထင်ရှားသော သူရဲကောင်းများ: King Naresuan, King Taksin",
     "ထိုင်း": "ထင်ရှားသော သူရဲကောင်းများ: King Naresuan, King Taksin",
-    "japan": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga (織田 信長), Miyamoto Musashi (宮本 武蔵)",
-    "ဂျပန်": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga, Miyamoto Musashi"
+    "japan": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga, Miyamoto Musashi",
+    "ဂျပන්": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga, Miyamoto Musashi"
 }
 
 
@@ -84,7 +84,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
   query_lower = query.lower()
 
-  # Step A: Check English Wikipedia using English/Translated term
+  # Step A: Check Wikipedia API for the searched query (Country or Hero)
   wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
   headers = {"User-Agent": "Mozilla/5.0"}
   
@@ -99,7 +99,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         translated_title = translate_to_burmese(title)
         translated_extract = translate_to_burmese(extract)
         
-        # Check if we have predefined heroes for this country
+        # Check if the query is a country and append its heroes
         heroes_info = ""
         for country_key, heroes in COUNTRY_HEROES.items():
           if country_key in query_lower:
