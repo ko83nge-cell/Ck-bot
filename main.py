@@ -34,57 +34,75 @@ conn.commit()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
       "🤖 **Advanced History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် သူရဲကောင်းနာမည်ကို ရိုက်ထည့်ပါ (မြန်မာလို အလိုအလျောက် ဘာသာပြန်ပြမည်)။\n"
+      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် သူရဲကောင်းနာမည်ကို ရိုက်ထည့်ပါ။\n"
       "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
       "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
   )
 
 
-# --- Helper Function to Translate Text to Burmese ---
-def translate_to_burmese(text):
-  if not text:
-    return text
-  try:
-    url = "https://translate.googleapis.com/translate_a/single"
-    params = {
-        "client": "gtx",
-        "sl": "en",
-        "tl": "my",
-        "dt": "t",
-        "q": text,
+# --- Burmese History Data Mapping for Countries and Heroes ---
+BURMESE_DATABASE = {
+    "myanmar": {
+        "title": "မြန်မာနိုင်ငံ (သမိုင်း/အချက်အလက်)",
+        "extract": "မြန်မာနိုင်ငံ (တရားဝင်အမည်: ပြည်ထောင်စု သမ္မတ မြန်မာနိုင်ငံတော်) သည် အရှေ့တောင်အာရှတွင် တည်ရှိသော နိုင်ငံတစ်နိုင်ငံ ဖြစ်သည်။ နယ်နမိတ်အားဖြင့် အိန္ဒိယ၊ ဘင်္ဂလားဒေ့ရှ်၊ တရုတ်၊ လာအိုနှင့် ထိုင်းနိုင်ငံတို့နှင့် ထိစပ်နေသည်။ မြို့တော်မှာ နေပြည်တော် ဖြစ်ပြီး စီးပွားရေးမြို့တော်မှာ ရန်ကုန်မြို့ ဖြစ်သည်။",
+        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းဘုရား, ဘုရင့်နောင်, ကျန်စစ်သား, ဗိုလ်ချုပ်အောင်ဆန်း"
+    },
+    "မြန်မာ": {
+        "title": "မြန်မာနိုင်ငံ (သမိုင်း/အချက်အလက်)",
+        "extract": "မြန်မာနိုင်ငံ (တရားဝင်အမည်: ပြည်ထောင်စု သမ္မတ မြန်မာနိုင်ငံတော်) သည် အရှေ့တောင်အာရှတွင် တည်ရှိသော နိုင်ငံတစ်နိုင်ငံ ဖြစ်သည်။ နယ်နမိတ်အားဖြင့် အိန္ဒိယ၊ ဘင်္ဂလားဒေ့ရှ်၊ တရုတ်၊ လာအိုနှင့် ထိုင်းနိုင်ငံတို့နှင့် ထိစပ်နေသည်။ မြို့တော်မှာ နေပြည်တော် ဖြစ်ပြီး စီးပွားရေးမြို့တော်မှာ ရန်ကုန်မြို့ ဖြစ်သည်။",
+        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းဘုရား, ဘုရင့်နောင်, ကျန်စစ်သား, ဗိုလ်ချုပ်အောင်ဆန်း"
+    },
+    "thailand": {
+        "title": "ထိုင်းနိုင်ငံ (သမိုင်း/အချက်အလက်)",
+        "extract": "ထိုင်းနိုင်ငံသည် အရှေ့တောင်အာရှ အလယ်ပိုင်းတွင် တည်ရှိသော နိုင်ငံတစ်ခု ဖြစ်သည်။ ယခင်က ဆยาม (Siam) ဟု ခေါ်ဆိုခဲ့ကြသည်။ မြို့တော်မှာ ဘန်က็อกမြို့ ဖြစ်သည်။",
+        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** King Naresuan, King Taksin"
+    },
+    "ထိုင်း": {
+        "title": "ထိုင်းနိုင်ငံ (သမိုင်း/အချက်အလက်)",
+        "extract": "ထိုင်းနိုင်ငံသည် အရှေ့တောင်အာရှ အလယ်ပိုင်းတွင် တည်ရှိသော နိုင်ငံတစ်ခု ဖြစ်သည်။ ယခင်က ဆยาม (Siam) ဟု ခေါ်ဆိုခဲ့ကြသည်။ မြို့တော်မှာ ဘန်က็อกမြို့ ဖြစ်သည်။",
+        "heroes": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** King Naresuan, King Taksin"
+    },
+    "alaungpaya": {
+        "title": "အလောင်းဘုရား (သမိုင်းအချက်အလက်)",
+        "extract": "အလောင်းဘုရားသည် ကုန်းဘောင်မင်းဆက်ကို တည်ထောင်ခဲ့သော မြန်မာဘုရင် ဖြစ်သည်။ မြန်မာနိုင်ငံကို ဒုတိယအကြိမ် ပြန်လည်စုစည်းပေးခဲ့ပြီး နိုင်ငံတော်ကို ချဲ့ထွင်နိုင်ခဲ့သူ ဖြစ်သည်။",
+        "heroes": ""
+    },
+    "အလောင်းဘုရား": {
+        "title": "အလောင်းဘုရား (သမိုင်းအချက်အလက်)",
+        "extract": "အလောင်းဘုရားသည် ကုန်းဘောင်မင်းဆက်ကို တည်ထောင်ခဲ့သော မြန်မာဘုရင် ဖြစ်သည်။ မြန်မာနိုင်ငံကို ဒုတိယအကြိမ် ပြန်လည်စုစည်းပေးခဲ့ပြီး နိုင်ငံတော်ကို ချဲ့ထွင်နိုင်ခဲ့သူ ဖြစ်သည်။",
+        "heroes": ""
+    },
+    "bayinnaung": {
+        "title": "ဘုရင့်နောင် (သမိုင်းအချက်အလက်)",
+        "extract": "ဘုရင့်နောင်သည် တောင်ငူခေတ်၏ တတိယမြောက်ဘုရင်ဖြစ်ပြီး မြန်မာ့သမိုင်းတွင် နယ်မြေအကျယ်ပြန့်ဆုံးနှင့် အင်အားအကြီးမားဆုံး နိုင်ငံတော်ကို တည်ဆောက်ခဲ့သူ ဖြစ်သည်။",
+        "heroes": ""
+    },
+    "ဘုရင့်နောင်": {
+        "title": "ဘုရင့်နောင် (သမိုင်းအချက်အလက်)",
+        "extract": "ဘုရင့်နောင်သည် တောင်ငူခေတ်၏ တတိယမြောက်ဘုရင်ဖြစ်ပြီး မြန်မာ့သမိုင်းတွင် နယ်မြေအကျယ်ပြန့်ဆုံးနှင့် အင်အားအကြီးမားဆုံး နိုင်ငံတော်ကို တည်ဆောက်ခဲ့သူ ဖြစ်သည်။",
+        "heroes": ""
     }
-    response = requests.get(url, params=params)
-    if response.status_code == 200:
-      res_json = response.json()
-      translated_text = "".join([item[0] for item in res_json[0]])
-      return translated_text
-  except Exception as e:
-    print(f"Translation Error: {e}")
-  return text
-
-
-# --- Predefined Country Heroes Data ---
-COUNTRY_HEROES = {
-    "myanmar": "ထင်ရှားသော သူရဲကောင်းများ: အလောင်းဘုရား (Alaungpaya), ဘုရင့်နောင် (Bayinnaung), ကျန်စစ်သား (Kyanzittha), ဗိုလ်ချုပ်အောင်ဆန်း (General Aung San)",
-    "မြန်မာ": "ထင်ရှားသော သူရဲကောင်းများ: အလောင်းဘုရား (Alaungpaya), ဘုရင့်နောင် (Bayinnaung), ကျန်စစ်သား (Kyanzittha), ဗိုလ်ချုပ်အောင်ဆန်း (General Aung San)",
-    "thailand": "ထင်ရှားသော သူရဲကောင်းများ: King Naresuan, King Taksin",
-    "ထိုင်း": "ထင်ရှားသော သူရဲကောင်းများ: King Naresuan, King Taksin",
-    "japan": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga, Miyamoto Musashi",
-    "ဂျပန်": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga, Miyamoto Musashi"
 }
 
 
 # --- Combined Search Handler ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-  query = update.message.text.strip()
+  query = update.message.text.strip().lower()
   
   if query.startswith("/"):
     return
 
-  query_lower = query.lower()
+  # Check if query matches our Burmese Database
+  if query in BURMESE_DATABASE:
+    item = BURMESE_DATABASE[query]
+    reply_text = f"📚 **{item['title']}**\n\n{item['extract']}"
+    if item['heroes']:
+      reply_text += f"\n\n{item['heroes']}"
+    await update.message.reply_text(reply_text, parse_mode="Markdown")
+    return
 
-  # Step A: Check Wikipedia API for the searched query (Country or Hero)
+  # Fallback to Wikipedia API if not in local database
   wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
   headers = {"User-Agent": "Mozilla/5.0"}
   
@@ -96,24 +114,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       title = data.get("title", query)
       
       if extract and "not found" not in extract.lower():
-        # *** ဤနေရာတွင် translate_to_burmese ကို အသေအချာ ခေါ်သုံးပေးထားပါသည် ***
-        translated_title = translate_to_burmese(title)
-        translated_extract = translate_to_burmese(extract)
-        
-        # Check if the query is a country and append its heroes
-        heroes_info = ""
-        for country_key, heroes in COUNTRY_HEROES.items():
-          if country_key in query_lower:
-            heroes_info = f"\n\n⚔️ **{heroes}**"
-            break
-
-        reply_text = f"📚 **{translated_title} (သမိုင်း/အချက်အလက်)**\n\n{translated_extract}{heroes_info}"
+        reply_text = f"📚 **{title} (သမိုင်း/အချက်အလက်)**\n\n{extract}"
         await update.message.reply_text(reply_text, parse_mode="Markdown")
         return
   except Exception as e:
     print(f"Wikipedia API Error: {e}")
 
-  # Step B: If Wikipedia has no result, search in SQLite Movie Database
+  # Fallback to Movie Database
   await search_and_send_movie(update, context)
 
 
@@ -165,7 +172,7 @@ async def search_and_send_movie(
 
   if not results:
     await update.message.reply_text(
-        "❌ တောင်းပန်ပါတယ်၊ Wikipedia တွင်လည်း မတွေ့ရှိပါ၊ ရုပ်ရှင်ဒေတာဘေ့စ်ထဲတွင်လည်း အဆိုပါနာမည်နဲ့ ရုပ်ရှင်ကို ရှာမတွေ့ပါ။"
+        "❌ တောင်းပန်ပါတယ်၊ အဆိုပါ အချက်အလက် သို့မဟုတ် ရုပ်ရှင်ကို ရှာမတွေ့ပါ။"
     )
     return
 
@@ -202,7 +209,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Advanced Bot with Full Burmese Translation is running...")
+  print("Bot with Burmese Mapping is running...")
   app.run_polling()
 
 
