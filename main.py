@@ -64,14 +64,14 @@ def translate_to_burmese(text):
   return text
 
 
-# --- Combined Search: Wikipedia First, then Movie Database ---
+# --- Combined Search: Wikipedia (with Translation) First, then Movie Database ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.message.text.strip()
   
   if query.startswith("/"):
     return
 
-  # Step A: Check Wikipedia API normally using the exact query
+  # Step A: Check Wikipedia API for History/General Knowledge
   wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
   headers = {"User-Agent": "Mozilla/5.0"}
   
@@ -83,6 +83,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       title = data.get("title", query)
       
       if extract and "not found" not in extract.lower():
+        # Translate both title and extract to Burmese
         translated_title = translate_to_burmese(title)
         translated_extract = translate_to_burmese(extract)
         
@@ -98,7 +99,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await search_and_send_movie(update, context)
 
 
-# --- Movie Bot Features ---
+# --- Save Movie (Admin Only) ---
 async def save_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
   user_id = update.effective_user.id
   if ADMIN_IDS and user_id not in ADMIN_IDS:
@@ -146,7 +147,7 @@ async def search_and_send_movie(
 
   if not results:
     await update.message.reply_text(
-        "❌ တောင်းပန်ပါတယ်၊ Wikipedia တွင်လည်း မတွေ့ရှိပါ၊ ၎င်းအပြင် ရုပ်ရှင်ဒေတာဘေ့စ်ထဲတွင်လည်း အဆိုပါနာမည်နဲ့ ရုပ်ရှင်ကို ရှာမတွေ့ပါ။"
+        "❌ တောင်းပန်ပါတယ်၊ Wikipedia တွင်လည်း မတွေ့ရှိပါ၊ ရုပ်ရှင်ဒေတာဘေ့စ်ထဲတွင်လည်း အဆိုပါနာမည်နဲ့ ရုပ်ရှင်ကို ရှာမတွေ့ပါ။"
     )
     return
 
@@ -183,7 +184,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Combined History & Burmese Translated Bot is running...")
+  print("Combined History & Translated Bot is running...")
   app.run_polling()
 
 
