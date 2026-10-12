@@ -34,14 +34,38 @@ conn.commit()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
       "🤖 **Auto History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **သမိုင်းအချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် အကြောင်းအရာတစ်ခုကို ရိုက်ထည့်ပါ။ (ဥပမာ - `Myanmar` သို့မဟုတ် `Japan`)\n"
+      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် အကြောင်းအရာကို ရိုက်ထည့်ပါ (မြန်မာလို အလိုအလျောက် ဘာသာပြန်ပေးပါမည်)။\n"
       "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
       "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
   )
 
 
-# --- 1. Combined Search: Wikipedia First, then Movie Database ---
+# --- Helper Function to Translate Text to Burmese ---
+def translate_to_burmese(text):
+  if not text:
+    return text
+  try:
+    # Using free Google Translate API endpoint
+    url = "https://translate.googleapis.com/translate_a/single"
+    params = {
+        "client": "gtx",
+        "sl": "en",
+        "tl": "my",
+        "dt": "t",
+        "q": text,
+    }
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+      res_json = response.json()
+      translated_text = "".join([item[0] for item in res_json[0]])
+      return translated_text
+  except Exception as e:
+    print(f"Translation Error: {e}")
+  return text
+
+
+# --- 1. Combined Search: Wikipedia First (Translated to Burmese), then Movie Database ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.message.text.strip()
   
@@ -49,19 +73,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return
 
   # Step A: Check Wikipedia API for History/General Knowledge
-  url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
+  wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
   headers = {"User-Agent": "Mozilla/5.0"}
   
   try:
-    response = requests.get(url, headers=headers)
+    response = requests.get(wiki_url, headers=headers)
     if response.status_code == 200:
       data = response.json()
       extract = data.get("extract")
       title = data.get("title", query)
-      # If Wikipedia found a valid summary page, send it
+      
       if extract and "not found" not in extract.lower():
+        # Translate both title and extract to Burmese
+        translated_title = translate_to_burmese(title)
+        translated_extract = translate_to_burmese(extract)
+        
         await update.message.reply_text(
-            f"📚 **{title} (သမိုင်း/အချက်အလက်)**\n\n{extract}",
+            f"📚 **{translated_title} (သမိုင်း/အချက်အလက်)**\n\n{translated_extract}",
             parse_mode="Markdown",
         )
         return
@@ -157,7 +185,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Combined History & Movie Bot is running...")
+  print("Combined History & Burmese Translated Bot is running...")
   app.run_polling()
 
 
