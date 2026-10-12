@@ -34,20 +34,19 @@ conn.commit()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
       "🤖 **Global History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် သူရဲကောင်းနာမည်ကို ရိုက်ထည့်ပါ (မြန်မာလို အလိုအလျောက် ဘာသာပြန်ပြမည်)။\n"
+      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** ကမ္ဘာ့နိုင်ငံ မည်သည့်နိုင်ငံမဆို သို့မဟုတ် ပုဂ္ဂိုလ်တစ်ဦးဦး၏ နာမည်ကို ရိုက်ထည့်ပါ (မြန်မာလို အလိုအလျောက် ဘာသာပြန်ပြမည်)။\n"
       "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
       "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
   )
 
 
-# --- Helper Function to Translate Text to Burmese in Chunks ---
+# --- Helper Function to Translate Text to Burmese ---
 def translate_to_burmese(text):
   if not text:
     return text
   try:
-    # Google Translate API handles short paragraphs well, so we take the first 500 characters to avoid errors
-    q_text = text[:500]
+    q_text = text[:1500]  # Take up to 1500 characters to prevent API errors
     url = "https://translate.googleapis.com/translate_a/single"
     params = {
         "client": "gtx",
@@ -66,19 +65,7 @@ def translate_to_burmese(text):
   return text
 
 
-# --- Country Heroes Mapping in Burmese ---
-COUNTRY_HEROES_MAPPING = {
-    "myanmar": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းဘုရား, ဘုရင့်နောင်, ကျန်စစ်သား, ဗိုလ်ချုပ်အောင်ဆန်း",
-    "burma": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းဘုရား, ဘုရင့်နောင်, ကျန်စစ်သား, ဗိုလ်ချုပ်အောင်ဆန်း",
-    "မြန်မာ": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** အလောင်းဘုရား, ဘုရင့်နောင်, ကျန်စစ်သား, ဗိုလ်ချုပ်အောင်ဆန်း",
-    "thailand": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** King Naresuan, King Taksin",
-    "ထိုင်း": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** King Naresuan, King Taksin",
-    "japan": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Oda Nobunaga, Miyamoto Musashi",
-    "ဂျပန်": "⚔️ **ထင်ရှားသော သူရဲကောင်းများ:** Oda Nobunaga, Miyamoto Musashi"
-}
-
-
-# --- Combined Search Handler ---
+# --- Dynamic Search Handler for All Countries & Figures Worldwide ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.message.text.strip()
   
@@ -87,13 +74,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
   query_lower = query.lower()
 
-  # If user types 'Thai', force query to 'Thailand' to get proper summary instead of disambiguation list
+  # Handle common abbreviations or short forms
   if query_lower == "thai":
     search_query = "Thailand"
+  elif query_lower == "usa":
+    search_query = "United States"
+  elif query_lower == "uk":
+    search_query = "United Kingdom"
   else:
     search_query = query
 
-  # Step A: Check Wikipedia API
+  # Step A: Search Wikipedia API dynamically for ANY country or figure worldwide
   wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(search_query)}"
   headers = {"User-Agent": "Mozilla/5.0"}
   
@@ -105,24 +96,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       title = data.get("title", query)
       
       if extract and "not found" not in extract.lower():
-        # Translate title and extract to Burmese
+        # Translate title and extract dynamically to Burmese
         translated_title = translate_to_burmese(title)
         translated_extract = translate_to_burmese(extract)
         
-        # Check if country has heroes
-        heroes_info = ""
-        for key, heroes_list in COUNTRY_HEROES_MAPPING.items():
-          if key in query_lower:
-            heroes_info = f"\n\n{heroes_list}"
-            break
-
-        reply_text = f"📚 **{translated_title} (သမိုင်း/အချက်အလက်)**\n\n{translated_extract}{heroes_info}"
+        reply_text = f"📚 **{translated_title} (သမိုင်း/အချက်အလက်)**\n\n{translated_extract}"
         await update.message.reply_text(reply_text, parse_mode="Markdown")
         return
   except Exception as e:
     print(f"Wikipedia API Error: {e}")
 
-  # Step B: Fallback to Movie Database
+  # Step B: If not found on Wikipedia, search in SQLite Movie Database
   await search_and_send_movie(update, context)
 
 
@@ -211,7 +195,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Global Translated Bot is running...")
+  print("Global Dynamic Translated Bot is running...")
   app.run_polling()
 
 
