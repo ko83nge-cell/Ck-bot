@@ -33,23 +33,59 @@ conn.commit()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
   await update.message.reply_text(
-      "🤖 **Auto History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
-      "📚 **သမိုင်း/အချက်အလက်ရှာရန်:** နိုင်ငံအမည် သို့မဟုတ် အကြောင်းအရာကို ရိုက်ထည့်ပါ (မြန်မာဝီခီပီးဒီးယားမှ တိုက်ရိုက်ရှာဖွေပေးပါမည်)။\n"
+      "🤖 **Advanced History & Movie Bot** မှ ကြိုဆိုပါတယ်။\n\n"
+      "📚 **နိုင်ငံ သို့မဟုတ် သူရဲကောင်းများ ရှာရန်:** နိုင်ငံအမည် (သို့) ထင်ရှားသော သူရဲကောင်းနာမည်ကို အင်္ဂလိပ်/မြန်မာ မဆို ရိုက်ထည့်နိုင်ပါသည် (မြန်မာလို အလိုအလျောက် ဘာသာပြန်ပြမည်)။\n"
       "🎬 **ရုပ်ရှင်ရှာရန်:** ကြိုက်နှစ်သက်ရာ ရုပ်ရှင်နာမည်ကို ရိုက်ပို့ပါ။\n"
       "➕ **ရုပ်ရှင်အသစ်ထည့်ရန် (Admin သာ):** Bot ထဲသို့ ရုပ်ရှင်ဗီဒီယို (သို့) ဖိုင်ကို တိုက်ရိုက်ပို့ပါ။",
       parse_mode="Markdown",
   )
 
 
-# --- Search Burmese Wikipedia Directly ---
+# --- Helper Function to Translate Text to Burmese ---
+def translate_to_burmese(text):
+  if not text:
+    return text
+  try:
+    url = "https://translate.googleapis.com/translate_a/single"
+    params = {
+        "client": "gtx",
+        "sl": "en",
+        "tl": "my",
+        "dt": "t",
+        "q": text,
+    }
+    response = requests.get(url, params=params)
+    if response.status_code == 200:
+      res_json = response.json()
+      translated_text = "".join([item[0] for item in res_json[0]])
+      return translated_text
+  except Exception as e:
+    print(f"Translation Error: {e}")
+  return text
+
+
+# --- Predefined Country Heroes Data (English & Burmese mapping) ---
+COUNTRY_HEROES = {
+    "myanmar": "ထင်ရှားသော သူရဲကောင်းများ: အလောင်းဘုရား (Alaungpaya), ဘုရင့်နောင် (Bayinnaung), ကျန်စစ်သား (Kyanzittha), ဗိုလ်ချုပ်အောင်ဆန်း (General Aung San)",
+    "မြန်မာ": "ထင်ရှားသော သူရဲကောင်းများ: အလောင်းဘုရား (Alaungpaya), ဘုရင့်နောင် (Bayinnaung), ကျန်စစ်သား (Kyanzittha), ဗိုလ်ချုပ်အောင်ဆန်း (General Aung San)",
+    "thailand": "ထင်ရှားသော သူရဲကောင်းများ: King Naresuan (នเรศวร), King Taksin (ตากสิน)",
+    "ထိုင်း": "ထင်ရှားသော သူရဲကောင်းများ: King Naresuan, King Taksin",
+    "japan": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga (織田 信長), Miyamoto Musashi (宮本 武蔵)",
+    "ဂျပန်": "ထင်ရှားသော သူရဲကောင်းများ: Oda Nobunaga, Miyamoto Musashi"
+}
+
+
+# --- Combined Search Handler ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
   query = update.message.text.strip()
   
   if query.startswith("/"):
     return
 
-  # Use Myanmar Wikipedia API directly so results are already in Burmese
-  wiki_url = f"https://my.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
+  query_lower = query.lower()
+
+  # Step A: Check English Wikipedia using English/Translated term
+  wiki_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(query)}"
   headers = {"User-Agent": "Mozilla/5.0"}
   
   try:
@@ -60,15 +96,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
       title = data.get("title", query)
       
       if extract and "not found" not in extract.lower():
-        await update.message.reply_text(
-            f"📚 **{title} (သမိုင်း/အချက်အလက်)**\n\n{extract}",
-            parse_mode="Markdown",
-        )
+        translated_title = translate_to_burmese(title)
+        translated_extract = translate_to_burmese(extract)
+        
+        # Check if we have predefined heroes for this country
+        heroes_info = ""
+        for country_key, heroes in COUNTRY_HEROES.items():
+          if country_key in query_lower:
+            heroes_info = f"\n\n⚔️ **{heroes}**"
+            break
+
+        reply_text = f"📚 **{translated_title} (သမိုင်း/အချက်အလက်)**\n\n{translated_extract}{heroes_info}"
+        await update.message.reply_text(reply_text, parse_mode="Markdown")
         return
   except Exception as e:
-    print(f"Burmese Wikipedia API Error: {e}")
+    print(f"Wikipedia API Error: {e}")
 
-  # If not found in Burmese Wikipedia, search in SQLite Movie Database
+  # Step B: If Wikipedia has no result, search in SQLite Movie Database
   await search_and_send_movie(update, context)
 
 
@@ -120,7 +164,7 @@ async def search_and_send_movie(
 
   if not results:
     await update.message.reply_text(
-        "❌ တောင်းပန်ပါတယ်၊ မြန်မာဝီခီပီးဒီးယားတွင်လည်း မတွေ့ရှိပါ၊ ရုပ်ရှင်ဒေတာဘေ့စ်ထဲတွင်လည်း အဆိုပါနာမည်နဲ့ ရုပ်ရှင်ကို ရှာမတွေ့ပါ။"
+        "❌ တောင်းပန်ပါတယ်၊ Wikipedia တွင်လည်း မတွေ့ရှိပါ၊ ရုပ်ရှင်ဒေတာဘေ့စ်ထဲတွင်လည်း အဆိုပါနာမည်နဲ့ ရုပ်ရှင်ကို ရှာမတွေ့ပါ။"
     )
     return
 
@@ -157,7 +201,7 @@ def main():
       MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
   )
 
-  print("Burmese Wikipedia & Movie Bot is running...")
+  print("Advanced Bot with Heroes & Translation is running...")
   app.run_polling()
 
 
