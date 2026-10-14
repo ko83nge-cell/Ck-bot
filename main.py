@@ -6,23 +6,23 @@ import asyncio
 from urllib.parse import quote
 
 import requests
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    CallbackQueryHandler,
     filters,
 )
+from google_play_scraper import search as playstore_search
 
 # =========================================================
-# Configuration (set these in Railway -> Variables)
-# BOT_TOKEN: Telegram bot token
-# ADMIN_IDS: comma-separated Telegram user IDs, e.g. 12345,67890
-# DB_PATH: optional SQLite path; Railway Volume recommended
+# Configuration (Railway Variables ထဲတွင် ထည့်ရန်)
 # =========================================================
 
 TOKEN = os.getenv("BOT_TOKEN", "").strip()
+FORCE_CHANNEL = os.getenv("FORCE_CHANNEL", "").strip()  # ဥပမာ - @mygamechannel
 ADMIN_IDS = {
     int(value.strip())
     for value in os.getenv("ADMIN_IDS", "").split(",")
@@ -55,6 +55,48 @@ def init_db():
         db.commit()
 
 
+# ---------------------- Forced Subscription Check ----------------------
+
+async def check_user_subscription(bot, user_id: int) -> bool:
+    if not FORCE_CHANNEL:
+        return True
+    try:
+        member = await bot.get_chat_member(chat_id=FORCE_CHANNEL, user_id=user_id)
+        if member.status in ["creator", "administrator", "member"]:
+            return True
+        return False
+    except Exception as exc:
+        logger.warning("Could not check subscription: %s", exc)
+        return False
+
+
+async def verify_subscription_middleware(update: Update) -> bool:
+    if not FORCE_CHANNEL:
+        return True
+    
+    user = update.effective_user
+    message = update.effective_message
+    if not user or not message:
+        return False
+
+    is_member = await check_user_subscription(update.get_bot(), user.id)
+    if not is_member:
+        channel_url = f"https://t.me/{FORCE_CHANNEL.replace('@', '')}"
+        keyboard = [
+            [InlineKeyboardButton("📢 Channel Join ရန်", url=channel_url)],
+            [InlineKeyboardButton("🔄 စစ်ဆေးမည် (Joined)", callback_data="check_sub")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await message.reply_text(
+            "⚠️ **ကျေးဇူးပြု၍ ပထမဦးစွာ ကျွန်ုပ်တို့၏ Channel ကို Join ပေးပါ။**\n\n"
+            "Join ပြီးပါက အောက်ပါ '🔄 စစ်ဆေးမည် (Joined)' ခလုတ်ကို နှိပ်ပါ။",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+        return False
+    return True
+
+
 # ---------------------- API utilities ----------------------
 
 def get_json(url, params=None):
@@ -63,28 +105,19 @@ def get_json(url, params=None):
             url, params=params, headers=HEADERS, timeout=HTTP_TIMEOUT
         )
         if response.status_code != 200:
-            logger.info("API returned HTTP %s for %s", response.status_code, url)
             return None
         return response.json()
-    except (requests.RequestException, ValueError) as exc:
-        logger.warning("API request failed: %s", exc)
+    except (requests.RequestException, ValueError):
         return None
 
 
 def translate_to_burmese(text):
-    """Translate API content to Burmese. Return original text if translation fails."""
     if not text:
         return ""
     text = str(text)[:3500]
     data = get_json(
         "https://translate.googleapis.com/translate_a/single",
-        {
-            "client": "gtx",
-            "sl": "auto",
-            "tl": "my",
-            "dt": "t",
-            "q": text,
-        },
+        {"client": "gtx", "sl": "auto", "tl": "my", "dt": "t", "q": text},
     )
     try:
         if data and isinstance(data, list):
@@ -94,339 +127,45 @@ def translate_to_burmese(text):
     return text
 
 
-# ----------------------- Country lookup --------------------
-
-def get_country(query):
-    """
-    Search REST Countries dynamically. No built-in list of country names.
-    First try exact name, then use the API's name search result.
-    """
-    query = query.strip()
-    if not query:
-        return None
-
-    fields = (
-        "name,capital,region,subregion,population,languages,"
-        "currencies,cca2,cca3"
-    )
-
-    # Try exact match first; the API supports fullText=true.
-    data = get_json(
-        "https://restcountries.com/v3.1/name/" + quote(query, safe=""),
-        {"fullText": "true", "fields": fields},
-    )
-
-    # If exact match failed, try a broader name search.
-    if not isinstance(data, list) or not data:
-        data = get_json(
-            "https://restcountries.com/v3.1/name/" + quote(query, safe=""),
-            {"fields": fields},
-        )
-
-    if not isinstance(data, list) or not data:
-        return None
-
-    query_lower = query.casefold()
-    for country in data:
-        name = country.get("name") or {}
-        common = name.get("common", "")
-        official = name.get("official", "")
-        native_names = name.get("nativeName") or {}
-        native_values = []
-        for item in native_names.values():
-            if isinstance(item, dict):
-                native_values.extend(
-                    [item.get("common", ""), item.get("official", "")]
-                )
-
-        candidates = [common, official] + native_values
-        if any(
-            candidate and candidate.casefold() == query_lower
-            for candidate in candidates
-        ):
-            return country
-
-    # If the API found one unambiguous result, use it.
-    if len(data) == 1:
-        return data[0]
-
-    # Avoid returning a random country for a broad/ambiguous query.
-    return None
-
-
-def format_country(country):
-    name_data = country.get("name") or {}
-    common_name = name_data.get("common", "Unknown")
-    official_name = name_data.get("official", common_name)
-    capital = country.get("capital") or []
-    languages = country.get("languages") or {}
-    currencies = country.get("currencies") or {}
-
-    currency_text = ", ".join(
-        f"{item.get('name', code)}"
-        + (f" ({item.get('symbol')})" if item.get("symbol") else "")
-        for code, item in currencies.items()
-    )
-
-    raw = (
-        f"Country: {common_name}\n"
-        f"Official name: {official_name}\n"
-        f"Capital: {', '.join(capital) if capital else 'Not available'}\n"
-        f"Region: {country.get('region', 'Not available')}\n"
-        f"Subregion: {country.get('subregion', 'Not available')}\n"
-        f"Population: {country.get('population', 0):,}\n"
-        f"Languages: {', '.join(languages.values()) if languages else 'Not available'}\n"
-        f"Currencies: {currency_text or 'Not available'}\n"
-        f"Country codes: {country.get('cca2', '')} / {country.get('cca3', '')}"
-    )
-    return common_name, raw
-
-
-# --------------------- Wikipedia search --------------------
-
-def wikipedia_search(search_query, limit=5):
-    data = get_json(
-        "https://en.wikipedia.org/w/api.php",
-        {
-            "action": "query",
-            "list": "search",
-            "srsearch": search_query,
-            "srlimit": limit,
-            "format": "json",
-            "utf8": 1,
-        },
-    )
-    if not data:
-        return []
-    return data.get("query", {}).get("search", [])
-
-
-def wikipedia_summary(title):
-    url = (
-        "https://en.wikipedia.org/api/rest_v1/page/summary/"
-        + quote(title.replace(" ", "_"), safe="")
-    )
-    data = get_json(url)
-    if not isinstance(data, dict):
-        return None
-    if data.get("type") == "disambiguation":
-        return None
-    if not data.get("extract"):
-        return None
-    return data
-
-
-
-def search_person_or_hero(query):
-    """
-    Search a typed hero/person name dynamically, first on Burmese Wikipedia,
-    then English Wikipedia. Falls back to Wikipedia search results if the exact
-    page title does not exist. No list of names is hard-coded.
-    """
-    query = query.strip()
-    if not query:
-        return None
-
-    for language in ("my", "en"):
-        base = f"https://{language}.wikipedia.org"
-        # Try an exact page title.
-        exact = get_json(
-            base + "/api/rest_v1/page/summary/" + quote(query.replace(" ", "_"), safe="")
-        )
-        if (
-            isinstance(exact, dict)
-            and exact.get("extract")
-            and exact.get("type") != "disambiguation"
-        ):
-            return exact
-
-        # Search Wikipedia's index, then retrieve the article summary.
-        results = get_json(
-            base + "/w/api.php",
-            {
-                "action": "query",
-                "list": "search",
-                "srsearch": query,
-                "srlimit": 5,
-                "format": "json",
-                "utf8": 1,
-            },
-        )
-        items = (results or {}).get("query", {}).get("search", [])
-        for item in items:
-            title = (item.get("title") or "").strip()
-            if not title:
-                continue
-            summary = get_json(
-                base + "/api/rest_v1/page/summary/"
-                + quote(title.replace(" ", "_"), safe="")
-            )
-            if (
-                isinstance(summary, dict)
-                and summary.get("extract")
-                and summary.get("type") != "disambiguation"
-            ):
-                return summary
-    return None
-
-def get_country_history(country_name):
-    data = wikipedia_summary(country_name)
-    if data:
-        return data.get("extract", "")
-    # If exact page title differs, search Wikipedia and use the first useful page.
-    for item in wikipedia_search(f"{country_name} country history", limit=3):
-        summary = wikipedia_summary(item.get("title", ""))
-        if summary:
-            return summary.get("extract", "")
-    return ""
-
-
-def get_famous_people(country_name, limit=5):
-    """
-    Search Wikipedia dynamically for historical figures, independence leaders,
-    and notable people associated with the country. Results are not guaranteed
-    to be official national heroes.
-    """
-    search_queries = [
-        f"notable people from {country_name}",
-        f"historical figures of {country_name}",
-        f"independence leaders of {country_name}",
-    ]
-    results = []
-    seen = set()
-
-    for search_query in search_queries:
-        for item in wikipedia_search(search_query, limit=6):
-            title = (item.get("title") or "").strip()
-            if not title or title.casefold() in seen:
-                continue
-
-            # Exclude list/category pages; keep individual biography pages.
-            lower = title.casefold()
-            if lower.startswith(("list of ", "category:", "history of ")):
-                continue
-
-            summary = wikipedia_summary(title)
-            if not summary:
-                continue
-
-            extract = summary.get("extract", "").strip()
-            if not extract:
-                continue
-
-            seen.add(lower)
-            results.append({"name": title, "description": extract})
-            if len(results) >= limit:
-                return results
-
-    return results
-
-
-# ---------------------- Country response -------------------
-
-async def send_long_text(message, text, limit=3800):
-    """Split long messages without exceeding Telegram's text length limit."""
-    text = text or ""
-    while text:
-        if len(text) <= limit:
-            await message.reply_text(text)
-            break
-
-        split_at = text.rfind("\n", 0, limit)
-        if split_at < limit // 2:
-            split_at = limit
-        await message.reply_text(text[:split_at])
-        text = text[split_at:].lstrip()
-
-
-async def send_country_info(update, country):
-    message = update.effective_message
-    if not message:
-        return
-
-    country_name, raw_info = format_country(country)
-
-    translated_info = await asyncio.to_thread(translate_to_burmese, raw_info)
-    history = await asyncio.to_thread(get_country_history, country_name)
-
-    if history:
-        translated_history = await asyncio.to_thread(
-            translate_to_burmese, history[:1800]
-        )
-    else:
-        translated_history = (
-            "လက်ရှိတွင် Wikipedia မှ သမိုင်းအချက်အလက်ကို မရရှိနိုင်ပါ။"
-        )
-
-    await send_long_text(
-        message,
-        f"🌍 နိုင်ငံအကြောင်း: {country_name}\n\n"
-        f"📚 အထွေထွေအချက်အလက်\n{translated_info}\n\n"
-        f"🏛️ သမိုင်းအကျဉ်း\n{translated_history}",
-    )
-
-    people = await asyncio.to_thread(get_famous_people, country_name)
-
-    if not people:
-        await message.reply_text(
-            "🛡️ ထင်ရှားသူများ\n\n"
-            "Wikipedia မှ ယုံကြည်စိတ်ချရသော ကိုက်ညီသည့်ရလဒ်ကို "
-            "ယခုအချိန်တွင် မရရှိနိုင်ပါ။ နောက်မှ ထပ်စမ်းကြည့်ပါ။"
-        )
-        return
-
-    lines = [
-        f"🛡️ {country_name} မှ သမိုင်းဝင်/ထင်ရှားသူများ",
-        "",
-        "မှတ်ချက် - အောက်ပါအမည်များသည် Wikipedia ရှာဖွေမှုမှ "
-        "ရရှိထားသော သမိုင်းဝင်ပုဂ္ဂိုလ်များ သို့မဟုတ် ထင်ရှားသူများဖြစ်သည်။ "
-        "အားလုံးကို တရားဝင် 'သူရဲကောင်း' ဟု သတ်မှတ်ထားခြင်း မဟုတ်ပါ။",
-        "",
-    ]
-
-    for index, person in enumerate(people, 1):
-        translated_name = await asyncio.to_thread(
-            translate_to_burmese, person["name"]
-        )
-        translated_description = await asyncio.to_thread(
-            translate_to_burmese, person["description"][:550]
-        )
-        lines.append(
-            f"{index}. {translated_name} ({person['name']})\n"
-            f"{translated_description}\n"
-        )
-
-    await send_long_text(message, "\n".join(lines))
-
-
 # -------------------------- Commands -----------------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await verify_subscription_middleware(update):
+        return
+
     await update.effective_message.reply_text(
-        "🤖 Ck_helpbot မှ ကြိုဆိုပါတယ်။\n\n"
-        "🌍 နိုင်ငံအမည်ကို ရိုက်ထည့်ပါ။ Bot က အင်တာနက် API များမှ "
-        "နိုင်ငံအချက်အလက်ကို ရှာဖွေပေးပါမယ်။\n\n"
-        "ဥပမာအဖြစ် နိုင်ငံအမည်တစ်ခုခုကို ရိုက်ထည့်နိုင်ပါတယ်။ "
-        "အမည်စာရင်းကို Code ထဲမှာ ကြိုတင်ထည့်ထားဖို့ မလိုပါ။\n\n"
-        "📚 နိုင်ငံအချက်အလက်၊ သမိုင်းနဲ့ Wikipedia မှ "
-        "ထင်ရှားသူများကို ရှာဖွေပေးပါမယ်။\n\n"
-        "🎬 ရုပ်ရှင်ရှာရန် ရုပ်ရှင်အမည်ကို ရိုက်ပါ။\n"
+        "🤖 **Game & App Finder Bot မှ ကြိုဆိုပါတယ်။**\n\n"
+        "🎮 လိုချင်တဲ့ Play Store ဂိမ်းနာမည် (သို့) ရုပ်ရှင်အမည်ကို ရိုက်ထည့်ပါ။\n\n"
         "/help - အသုံးပြုနည်း"
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
-        "📖 အသုံးပြုနည်း\n\n"
-        "• နိုင်ငံအမည်ကို ရိုက်ပို့ပါ။\n"
-        "• ရှာဖွေမှုသည် REST Countries နှင့် Wikipedia API များကို အသုံးပြုသည်။\n"
-        "• ရလဒ်မတွေ့ပါက နိုင်ငံအမည်ကို အင်္ဂလိပ်လို ပြန်စမ်းပါ။\n"
-        "• ရုပ်ရှင်အမည်ဖြင့် သိမ်းထားသော ရုပ်ရှင်ကို ရှာနိုင်သည်။\n"
-        "• Admin သည် video/document ဖိုင်ပို့၍ ရုပ်ရှင်သိမ်းနိုင်သည်။"
+        "📖 **အသုံးပြုနည်း**\n\n"
+        "• Bot မသုံးမီ သတ်မှတ်ထားသော Channel ကို အရင် Join ရပါမည်။\n"
+        "• ဂိမ်း သို့မဟုတ် အက်ပ်နာမည်ကို ရိုက်ထည့်ပါက Play Store မှ ရှာဖွေပေးပါမည်။\n"
+        "• Admin များအတွက် ဖိုင်ပို့ပြီး Database ထဲ သိမ်းဆည်းနိုင်ပါသည်။"
     )
 
 
-# ------------------------ Movie storage --------------------
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "check_sub":
+        user_id = query.from_user.id
+        is_member = await check_user_subscription(context.bot, user_id)
+        if is_member:
+            await query.message.edit_text(
+                "✅ ကျေးဇူးတင်ပါတယ်! ယခု Bot ကို အပြည့်အစုံ အသုံးပြုနိုင်ပါပြီ။\n\n"
+                "လိုချင်သော ဂိမ်းနာမည်ကို ဆက်လက်ရိုက်ထည့်ပါ။"
+            )
+        else:
+            await query.answer("❌ ကျေးဇူးပြု၍ Channel ကို အရင် Join ပေးပါ။", show_alert=True)
+
+
+# ------------------------ Storage & Search --------------------
 
 async def save_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
@@ -435,17 +174,15 @@ async def save_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if user.id not in ADMIN_IDS:
-        await message.reply_text(
-            "⚠️ ရုပ်ရှင်ဖိုင်တင်ခွင့်ကို Admin များသာ အသုံးပြုနိုင်ပါတယ်။"
-        )
+        await message.reply_text("⚠️ ဖိုင်တင်ခွင့်ကို Admin များသာ အသုံးပြုနိုင်ပါတယ်။")
         return
 
     if message.video:
         file_id = message.video.file_id
-        title = message.caption or getattr(message.video, "file_name", None) or "Untitled Movie"
+        title = message.caption or getattr(message.video, "file_name", None) or "Untitled File"
     elif message.document:
         file_id = message.document.file_id
-        title = message.caption or message.document.file_name or "Untitled Movie"
+        title = message.caption or message.document.file_name or "Untitled File"
     else:
         return
 
@@ -456,56 +193,59 @@ async def save_movie(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 (title.lower(), file_id, title),
             )
             db.commit()
-        await message.reply_text(f"✅ ရုပ်ရှင်သိမ်းဆည်းပြီးပါပြီ။\n🎬 {title}")
+        await message.reply_text(f"✅ ဖိုင်ကို Database ထဲသို့ သိမ်းဆည်းပြီးပါပြီ။\n📥 {title}")
     except sqlite3.Error:
-        logger.exception("Could not save movie")
+        logger.exception("Could not save file")
         await message.reply_text("❌ ဒေတာဘေ့စ်ထဲသို့ သိမ်းဆည်းမရပါ။")
 
 
-async def search_movie(update: Update, query: str):
-    message = update.effective_message
-    if not message:
-        return
-
+async def search_local_db(query: str):
     try:
         with sqlite3.connect(DB_PATH, timeout=30) as db:
             results = db.execute(
                 """
                 SELECT title, file_id, caption FROM movies
                 WHERE LOWER(title) LIKE ?
-                ORDER BY id DESC LIMIT 5
+                ORDER BY id DESC LIMIT 3
                 """,
                 (f"%{query.lower()}%",),
             ).fetchall()
+            return results
     except sqlite3.Error:
-        logger.exception("Movie search failed")
-        await message.reply_text("❌ ရုပ်ရှင်ဒေတာဘေ့စ်ကို ဖတ်မရပါ။")
-        return
+        return []
 
-    if not results:
-        await message.reply_text(
-            "❌ နိုင်ငံအချက်အလက် သို့မဟုတ် သိမ်းထားသော ရုပ်ရှင်ကို မတွေ့ပါ။\n"
-            "နိုင်ငံအမည်ကို အင်္ဂလိပ်လို ရိုက်ပြီး ထပ်စမ်းကြည့်ပါ။"
-        )
-        return
 
-    for title, file_id, caption in results:
-        caption_text = f"🎬 {caption or title}\n\nCk_helpbot"
-        try:
-            await message.reply_video(video=file_id, caption=caption_text[:1000])
-        except Exception:
-            try:
-                await message.reply_document(
-                    document=file_id, caption=caption_text[:1000]
-                )
-            except Exception:
-                logger.exception("Could not send movie file")
-                await message.reply_text(f"❌ ဖိုင်ပို့မရပါ: {caption or title}")
+def search_playstore(query: str):
+    """Google Play Store မှ ဂိမ်း/အက်ပ်များကို ရှာဖွေပေးခြင်း"""
+    try:
+        results = playstore_search(query, lang="en", country="us", n_hits=1)
+        if results:
+            app = results[0]
+            app_name = app.get("title")
+            app_id = app.get("appId")
+            developer = app.get("developer")
+            score = app.get("score")
+            icon = app.get("icon")
+            link = f"https://play.google.com/store/apps/details?id={app_id}"
+            
+            return {
+                "name": app_name,
+                "developer": developer,
+                "score": score,
+                "icon": icon,
+                "link": link
+            }
+    except Exception as e:
+        logger.error(f"Playstore search error: {e}")
+    return None
 
 
 # ----------------------- Main text handler -----------------
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await verify_subscription_middleware(update):
+        return
+
     message = update.effective_message
     if not message or not message.text:
         return
@@ -514,73 +254,60 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not query or query.startswith("/"):
         return
 
-    # First: search country API dynamically.
-    try:
-        country = await asyncio.to_thread(get_country, query)
-        if country:
-            await send_country_info(update, country)
-            return
-    except Exception:
-        logger.exception("Country lookup failed")
+    # ၁။ ပထမဦးစွာ Local Database (သိမ်းထားသောဖိုင်များ) ထဲတွင် ရှာမည်
+    local_results = await search_local_db(query)
+    if local_results:
+        for title, file_id, caption in local_results:
+            caption_text = f"📥 {caption or title}\n\nGame Bot"
+            try:
+                await message.reply_video(video=file_id, caption=caption_text[:1000])
+                return
+            except Exception:
+                try:
+                    await message.reply_document(document=file_id, caption=caption_text[:1000])
+                    return
+                except Exception:
+                    pass
 
-    # Second: search a typed hero/person name dynamically on Burmese/English Wikipedia.
-    # This also works for names listed in the country response.
-    try:
-        data = await asyncio.to_thread(search_person_or_hero, query)
-        if data and data.get("extract"):
-            translated = await asyncio.to_thread(
-                translate_to_burmese, data["extract"][:3000]
-            )
-            title = data.get("title", query)
-            await send_long_text(
-                message,
-                f"🛡️ {title}\n\n{translated}\n\n"
-                "🔎 အချက်အလက်ရင်းမြစ်: Wikipedia"
-            )
-            return
-    except Exception:
-        logger.exception("Wikipedia person search failed")
-
-    # Finally: search locally stored movies.
-    await search_movie(update, query)
-
-
-# ------------------------- Error handler -------------------
-
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    logger.error(
-        "Unhandled Telegram error",
-        exc_info=(type(context.error), context.error, context.error.__traceback__)
-        if context.error else None,
-    )
+    # ၂။ Local ထဲ မရှိပါက Google Play Store ပေါ်တွင် ရှာဖွေပေးမည်
+    await message.reply_text(f"🔍 '{query}' ကို Play Store ပေါ်တွင် ရှာဖွေနေပါပြီ...")
+    
+    playstore_result = await asyncio.to_thread(search_playstore, query)
+    if playstore_result:
+        response_text = (
+            f"🎮 **{playstore_result['name']}**\n\n"
+            f"👤 ဖန်တီးသူ: {playstore_result['developer']}\n"
+            f"⭐ Rating: {playstore_result['score']}\n\n"
+            f"🔗 **Play Store တွင် ဒေါင်းလုဒ်လုပ်ရန်:**\n{playstore_result['link']}"
+        )
+        await message.reply_text(response_text, parse_mode="Markdown")
+    else:
+        await message.reply_text(
+            "❌ မည်သည့်ရလဒ်မှ မတွေ့ပါ။ (Local Database နှင့် Play Store နှစ်ခုစလုံးတွင် ရှာမတွေ့ပါ)"
+        )
 
 
 # ---------------------------- Main -------------------------
 
 def main():
     if not TOKEN:
-        raise RuntimeError(
-            "BOT_TOKEN မရှိပါ။ Railway -> Variables ထဲတွင် BOT_TOKEN ထည့်ပါ။"
-        )
+        raise RuntimeError("BOT_TOKEN မရှိပါ။ Railway Variables ထဲတွင် BOT_TOKEN ထည့်ပါ။")
 
     init_db()
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(
         MessageHandler(filters.VIDEO | filters.Document.ALL, save_movie)
     )
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
     )
-    app.add_error_handler(error_handler)
 
-    logger.info("Ck_helpbot is starting")
-    app.run_polling(
-        drop_pending_updates=False,
-        allowed_updates=Update.ALL_TYPES,
-    )
+    logger.info("Bot with Play Store Search & Force Sub is running...")
+    app.run_polling(drop_pending_updates=False)
 
 
 if __name__ == "__main__":
