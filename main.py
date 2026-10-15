@@ -48,13 +48,12 @@ def init_db():
 def translate_text(text, target_lang="my"):
     if not text: return ""
     try:
-        url = "https://translate.googleapis.com/translate_a/single"
-        params = {"client": "gtx", "sl": "auto", "tl": target_lang, "dt": "t", "q": str(text)[:3500]}
-        response = requests.get(url, params=params, headers=HEADERS, timeout=HTTP_TIMEOUT)
-        if response.status_code == 200:
-            data = response.json()
-            if data and isinstance(data, list):
-                return "".join(part[0] for part in data[0] if part and part[0])
+        # AI ကို အသုံးပြု၍ ပိုမိုတိကျသဘာဝကျသော ဘာသာပြန်ဆိုမှု ပြုလုပ်ခြင်း
+        lang_name = "Burmese (Myanmar)" if target_lang == "my" else target_lang
+        ai_url = f"https://text.pollinations.ai/{quote(f'Translate the following text accurately into {lang_name}. Provide ONLY the translated text without extra explanation: ' + text)}"
+        res = requests.get(ai_url, timeout=20)
+        if res.status_code == 200 and res.text.strip():
+            return res.text.strip()
     except Exception as e:
         logger.error(f"Translation error: {e}")
     return text
@@ -96,7 +95,7 @@ def free_social_ai_chat(prompt):
             return res.text.strip()
     except Exception as e:
         logger.error(f"AI Chat error: {e}")
-    return translate_text(f"မင်္ဂလာပါရှင့်၊ '{prompt}' နဲ့ ပတ်သက်ပြီး ကျွန်တော် ကူညီပေးနိုင်ပါတယ်။", "my")
+    return "မင်္ဂလာပါရှင့်၊ အချက်အလက်များကို လက်ခံရရှိပါသည်။"
 
 
 # ---------------------- Channel join verification ------------------
@@ -165,7 +164,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
     await update.effective_message.reply_text(
-        "🤖 **Ck_helpbot (Channel Gated & Smart AI Version)** မှ ကြိုဆိုပါတယ်။\n\n"
+        "🤖 **Ck_helpbot (Smart AI & Utility Version)** မှ ကြိုဆိုပါတယ်။\n\n"
         "💬 မည်သည့်စာသားကိုမဆို ရိုက်ပို့၍ ဖော်ရွေစွာ စကားပြောဆိုနိုင်ပါပြီ။\n\n"
         "🛠️ **အသုံးဝင်သော အမိန့်ခေါ်ဆိုမှုများ:**\n"
         "🌤️ `/weather မြို့နာမည်` - ရာသီဥတုကြည့်ရန်\n"
