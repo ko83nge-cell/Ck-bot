@@ -31,7 +31,7 @@ CHANNEL_URL = os.getenv("CHANNEL_URL", "").strip()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 logger = logging.getLogger("ck_helpbot")
 
-HEADERS = {"User-Agent": "CkHelpBot/1.0"}
+HEADERS = {"User-Agent": "Mozilla/5.0"}
 HTTP_TIMEOUT = 15
 
 def init_db():
@@ -45,60 +45,68 @@ def init_db():
         """)
         db.commit()
 
-def get_json(url, params=None):
-    try:
-        res = requests.get(url, params=params, headers=HEADERS, timeout=HTTP_TIMEOUT)
-        return res.json() if res.status_code == 200 else None
-    except:
-        return None
-
 def translate_text(text, target_lang="my"):
     if not text: return ""
-    # Google Translate API endpoint ကို တိကျမှန်ကန်စွာ ပြင်ဆင်ထားသည်
-    url = "https://translate.googleapis.com/translate_a/single"
-    params = {
-        "client": "gtx",
-        "sl": "auto",
-        "tl": target_lang,
-        "dt": "t",
-        "q": str(text)[:3500]
-    }
-    data = get_json(url, params=params)
     try:
-        if data and isinstance(data, list):
-            return "".join(part[0] for part in data[0] if part and part[0])
-    except:
-        pass
+        url = "https://translate.googleapis.com/translate_a/single"
+        params = {"client": "gtx", "sl": "auto", "tl": target_lang, "dt": "t", "q": str(text)[:3500]}
+        response = requests.get(url, params=params, headers=HEADERS, timeout=HTTP_TIMEOUT)
+        if response.status_code == 200:
+            data = response.json()
+            if data and isinstance(data, list):
+                return "".join(part[0] for part in data[0] if part and part[0])
+    except Exception as e:
+        logger.error(f"Translation error: {e}")
     return text
 
 def get_weather(city_name):
-    geo = get_json("https://geocoding-api.open-meteo.com/v1/search", {"name": city_name, "count": 1})
-    if not geo or not geo.get("results"): return None
-    loc = geo["results"][0]
-    w = get_json("https://api.open-meteo.com/v1/forecast", {
-        "latitude": loc["latitude"], "longitude": loc["longitude"],
-        "current": "temperature_2m,relative_humidity_2m,wind_speed_10m"
-    })
-    if not w or "current" not in w: return None
-    curr = w["current"]
-    return f"🌤️ {loc.get('name')}, {loc.get('country', '')}\n🌡️ အပူချိန်: {curr.get('temperature_2m')}°C\n💧 စိုထိုင်းဆ: {curr.get('relative_humidity_2m')}%"
+    try:
+        geo_res = requests.get("https://geocoding-api.open-meteo.com/v1/search", params={"name": city_name, "count": 1}, timeout=HTTP_TIMEOUT).json()
+        if not geo_res.get("results"): return None
+        loc = geo_res["results"][0]
+        w_res = requests.get("https://api.open-meteo.com/v1/forecast", params={
+            "latitude": loc["latitude"], "longitude": loc["longitude"],
+            "current": "temperature_2m,relative_humidity_2m,wind_speed_10m"
+        }, timeout=HTTP_TIMEOUT).json()
+        curr = w_res.get("current", {})
+        return f"🌤️ {loc.get('name')}, {loc.get('country', '')}\n🌡️ အပူချိန်: {curr.get('temperature_2m')}°C\n💧 စိုထိုင်းဆ: {curr.get('relative_humidity_2m')}%"
+    except:
+        return None
 
 def get_exchange_rates():
-    data = get_json("https://open.er-api.com/v6/latest/USD")
-    if not data or "rates" not in data: return None
-    rates = data["rates"]
-    return f"💱 **US Dollar (1 USD) လဲလှယ်နှုန်းများ**\n\n💶 ယူရို (EUR): {rates.get('EUR')}\n🇹🇭 ထိုင်းဘတ် (THB): {rates.get('THB')}\n🇸🇬 စင်ကာပူဒေါ်လာ (SGD): {rates.get('SGD')}\n🇲🇾 မလေးရှားရင်းဂစ် (MYR): {rates.get('MYR')}\n🇯🇵 ဂျပန်ယန်း (JPY): {rates.get('JPY')}"
+    try:
+        data = requests.get("https://open.er-api.com/v6/latest/USD", timeout=HTTP_TIMEOUT).json()
+        rates = data.get("rates", {})
+        return (
+            "💱 **US Dollar (1 USD) လဲလှယ်နှုန်းများ**\n\n"
+            f"💶 ယူရို (EUR): {rates.get('EUR')}\n"
+            f"🇹🇭 ထိုင်းဘတ် (THB): {rates.get('THB')}\n"
+            f"🇸🇬 စင်ကာပူဒေါ်လာ (SGD): {rates.get('SGD')}\n"
+            f"🇲🇾 မလေးရှားရင်းဂစ် (MYR): {rates.get('MYR')}\n"
+            f"🇯🇵 ဂျပန်ယန်း (JPY): {rates.get('JPY')}"
+        )
+    except:
+        return None
 
 def smart_ai_chat(prompt):
+    """မေးသမျှကို မြန်မာလို အဓိပ္ပာယ်ရှိရှိ ပြန်ပေးမည့် AI စနစ်"""
     prompt_lower = prompt.lower()
-    if any(word in prompt_lower for word in ["မင်္ဂလာပါ", "hello", "hi"]):
+    if any(w in prompt_lower for w in ["မင်္ဂလာပါ", "hello", "hi", "ောင်ရိုး"]):
         return "မင်္ဂလာပါရှင့်။ Ck_helpbot မှ ကြိုဆိုပါတယ်။ ယနေ့ ဘယ်လိုအကူအညီပေးရမလဲဗျ။"
+    if "နေကောင်းလား" in prompt_lower or "how are you" in prompt_lower:
+        return "ကျေးဇူးတင်ပါတယ်၊ ကျွန်တော် နေကောင်းပါတယ်။ သင်ရော နေကောင်းရဲ့လားရှင့်။"
     
-    summary = get_json("https://en.wikipedia.org/api/rest_v1/page/summary/" + quote(prompt.replace(" ", "_"), safe=""))
-    if isinstance(summary, dict) and summary.get("extract"):
-        return translate_text(summary.get("extract"), "my")
+    # Wikipedia မှ ရှာဖွေပြီး မြန်မာလို ပြန်ဆိုပေးခြင်း
+    try:
+        wiki_res = requests.get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(prompt.replace(' ', '_'))}", timeout=HTTP_TIMEOUT).json()
+        if isinstance(wiki_res, dict) and wiki_res.get("extract"):
+            return translate_text(wiki_res.get("extract"), "my")
+    except:
+        pass
     
-    return translate_text(f"I understand you are asking about '{prompt}'. Let me know how else I can assist you!", "my")
+    # အထွေထွေ မေးခွန်းများအတွက် မြန်မာလို အလိုအလျောက် ဘာသာပြန်ဖြေကြားပေးခြင်း
+    fallback_reply = f"မေးမြန်းချက် '{prompt}' နှင့် ပတ်သက်ပြီး လက်ရှိတွင် ဤအချက်အလက်ကို ရရှိထားပါသည်။ လိုအပ်သည်များကို ထပ်မံမေးမြန်းနိုင်ပါသည်။"
+    return translate_text(fallback_reply, "my")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
@@ -107,7 +115,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛠️ **အသုံးဝင်သော အမိန့်ခေါ်ဆိုမှုများ:**\n"
         "🌤️ `/weather မြို့နာမည်` - ရာသီဥတုကြည့်ရန်\n"
         "💱 `/rate` - နိုင်ငံခြားငွေလဲနှုန်းများ\n"
-        "🔤 `/tr စာသား` - မြန်မာလို ဘာသာပြန်ရန် (သို့) `/tr en စာသား`\n"
+        "🔤 `/tr စာသား` (သို့) `/tr en မင်္ဂလာပါ` - ဘာသာပြန်ရန်\n"
         "⏰ `/time` - လက်ရှိ အချိန်နှင့် ရက်စွဲ\n"
         "⚖️ `/bmi အရပ် ကိုယ်အလေးချိန်` - BMI တွက်ရန်\n"
         "📱 `/qr စာသား` - QR Code ထုတ်ရန်\n"
@@ -136,12 +144,11 @@ async def translate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("အသုံးပြုပုံ:\n• မြန်မာလိုပြန်ရန်: `/tr welcome`\n• အခြားဘာသာပြန်ရန်: `/tr en မင်္ဂလာပါ`")
         return
     
-    # ဥပမာ - /tr en မင်္ဂလာပါ လို့ရိုက်ရင် args[0] က 'en' ဖြစ်မယ်
     if len(args) > 1 and len(args[0]) == 2:
         target_lang = args[0]
         text_to_translate = " ".join(args[1:])
     else:
-        target_lang = "my" # မပါရင် မြန်မာလို ပုံသေပြန်ပေးမည်
+        target_lang = "my"
         text_to_translate = " ".join(args)
 
     res = await asyncio.to_thread(translate_text, text_to_translate, target_lang)
@@ -170,7 +177,7 @@ async def qr_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("အသုံးပြုပုံ: `/qr စာသား သို့မဟုတ် လင့်ခ်`")
         return
     qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={quote(text)}"
-    await update.effective_message.reply_photo(photo=qr_url, caption=f"📱 QR Code: {text[:100]}")
+    await update.effective_photo(photo=qr_url, caption=f"📱 QR Code: {text[:100]}")
 
 async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -201,7 +208,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await context.bot.send_chat_action(chat_id=message.chat_id, action="typing")
     resp = await asyncio.to_thread(smart_ai_chat, query)
-    await message.reply_text(f"🤖 **Bot Assistant:**\n\n{resp}")
+    await update.effective_message.reply_text(f"🤖 **Bot Assistant:**\n\n{resp}")
 
 def main():
     if not TOKEN: raise RuntimeError("BOT_TOKEN မရှိပါ။")
