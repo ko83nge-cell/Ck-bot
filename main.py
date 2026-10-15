@@ -95,6 +95,31 @@ def get_exchange_rates():
     except:
         return None
 
+def get_dictionary_definition(word):
+    try:
+        res = requests.get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{quote(word)}", timeout=HTTP_TIMEOUT)
+        if res.status_code == 200:
+            data = res.json()
+            if isinstance(data, list) and data:
+                entry = data[0]
+                word_str = entry.get("word", word)
+                phonetic = entry.get("phonetic", "")
+                meanings = entry.get("meanings", [])
+                
+                result_text = f"📖 **Word:** {word_str} {phonetic}\n"
+                for m in meanings[:2]:
+                    part_of_speech = m.get("partOfSpeech", "")
+                    definitions = m.get("definitions", [])
+                    result_text += f"\n🔹 *{part_of_speech}*\n"
+                    for d in definitions[:2]:
+                        result_text += f"• {d.get('definition')}\n"
+                        if d.get("example"):
+                            result_text += f"  *(Ex: {d.get('example')})*\n"
+                return result_text
+    except:
+        pass
+    return None
+
 def free_social_ai_chat(prompt):
     try:
         ai_url = f"https://text.pollinations.ai/{quote('You are a friendly, polite, and warm Burmese AI assistant. Reply naturally and helpfully in Burmese: ' + prompt)}"
@@ -178,11 +203,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🌤️ `/weather မြို့နာမည်` - ရာသီဥတုကြည့်ရန်\n"
         "💱 `/rate` - နိုင်ငံခြားငွေလဲနှုန်းများ\n"
         "🔤 `/tr စာသား` (သို့) `/tr en စာသား` - ဘာသာပြန်ရန်\n"
+        "📖 `/define စကားလုံး` - အင်္ဂလိပ်အဘိဓာန် ရှာရန်\n"
+        "💡 `/quote` - နေ့စဉ် အားပေးစကားများ\n"
         "⏰ `/time` - လက်ရှိ အချိန်နှင့် ရက်စွဲ\n"
         "⚖️ `/bmi အရပ် ကိုယ်အလေးချိန်` - BMI တွက်ရန်\n"
-        "💧 `/water ကိုယ်အလေးချိန်(ကီလို)` - ရေဓာတ်သောက်ရန်ပမာဏ\n"
+        "💧 `/water ကိုယ်အလေးချိန်` - ရေဓာတ်သောက်ရန်ပမာဏ\n"
         "🔄 `/conv kg lb 50` - ယူနစ်ပြောင်းရန်\n"
-        "🔑 `/password` - လုံခြုံသော စကားဝှက်ဖန်တီးရန်\n"
+        "🔑 `/password` - စကားဝှက်ဖန်တီးရန်\n"
         "📱 `/qr စာသား` - QR Code ထုတ်ရန်\n"
         "📝 `/note မှတ်စု` - မှတ်စုသိမ်းရန်\n"
         "📋 `/mynotes` - မှတ်စုများကြည့်ရန်\n"
@@ -229,6 +256,32 @@ async def translate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     res = await asyncio.to_thread(translate_text, text_to_translate, target_lang)
     await update.effective_message.reply_text(f"🔤 **ဘာသာပြန်ဆိုချက် ({target_lang}):**\n\n{res}")
 
+async def define_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    args = context.args
+    if not args:
+        await update.effective_message.reply_text("အသုံးပြုပုံ: `/define success`")
+        return
+    word = args[0].strip()
+    res = await asyncio.to_thread(get_dictionary_definition, word)
+    if res:
+        await update.effective_message.reply_text(res)
+    else:
+        await update.effective_message.reply_text(f"❌ '{word}' ၏ အဓိပ္ပာယ်ကို ရှာမတွေ့ပါ။")
+
+async def quote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    try:
+        q_res = requests.get("https://api.quotable.io/random", timeout=HTTP_TIMEOUT).json()
+        content = q_res.get("content", "Keep going, you are doing great!")
+        author = q_res.get("author", "Unknown")
+        translated_q = await asyncio.to_thread(translate_text, f'"{content}" - {author}', "my")
+        await update.effective_message.reply_text(f"💡 **နေ့စဉ် ခွန်အားဖြစ်စေသော စကားစု:**\n\n{translated_q}")
+    except:
+        await update.effective_message.reply_text("💡 **နေ့စဉ် စကားစု:** ယုံကြည်မှုအပြည့်နဲ့ ရှေ့ဆက်ပါ။")
+
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
@@ -259,9 +312,9 @@ async def water_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         weight = float(args[0])
-        water_ml = weight * 35  # 1 kg = 35 ml roughly
+        water_ml = weight * 35
         water_liters = water_ml / 1000
-        await update.effective_message.reply_text(f"💧 **ရေဓာတ်သောက်သုံးရန် ညွှန်ကြားချက်**\n\n• ကိုယ်အလေးချိန်: {weight} kg\n• တစ်နေ့တာ သောက်သင့်သော ရေပမာဏ: **{water_liters:.2f} လီတာ** (ခန့်မှန်းခြေ ဖန်ခွက် {int(water_ml / 250)} ခွက်ခန့်)")
+        await update.effective_message.reply_text(f"💧 **ရေဓာတ်သောက်သုံးရန် ညွှန်ကြားချက်**\n\n• ကိုယ်အလေးချိန်: {weight} kg\n• တစ်နေ့တာ သောက်သင့်သော ရေပမာဏ: **{water_liters:.2f} လီတာ**")
     except:
         await update.effective_message.reply_text("❌ ကိုယ်အလေးချိန်ကို ဂဏန်းဖြင့် မှန်ကန်စွာ ထည့်ပါ။")
 
@@ -270,20 +323,20 @@ async def convert_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     args = context.args
     if len(args) < 3:
-        await update.effective_message.reply_text("အသုံးပြုပုံ: `/conv ယူနစ်ဟောင်း ယူနစ်သစ် ပမာဏ`\nဥပမာ: `/conv kg lb 50` (သို့မဟုတ်) `/conv c f 30`")
+        await update.effective_message.reply_text("အသုံးပြုပုံ: `/conv ယူနစ်ဟောင်း ယူနစ်သစ် ပမာဏ`\nဥပမာ: `/conv kg lb 50`")
         return
     try:
         u_from, u_to, val = args[0].lower(), args[1].lower(), float(args[2])
         res = None
         if u_from == "kg" and u_to == "lb": res = val * 2.20462
-        elif u_from == "lb" and u_from == "kg": res = val / 2.20462
+        elif u_from == "lb" and u_to == "kg": res = val / 2.20462
         elif u_from == "c" and u_to == "f": res = (val * 9/5) + 32
         elif u_from == "f" and u_to == "c": res = (val - 32) * 5/9
         
         if res is not None:
             await update.effective_message.reply_text(f"🔄 **ယူနစ်ပြောင်းလဲမှု:**\n\n{val} {u_from.upper()} = **{res:.2f} {u_to.upper()}**")
         else:
-            await update.effective_message.reply_text("❌ လက်ရှိတွင် kg/lb နှင့် c/f (Temperature) များကိုသာ တိုက်ရိုက်ပြောင်းပေးနိုင်ပါသည်။")
+            await update.effective_message.reply_text("❌ kg/lb နှင့် c/f များကိုသာ တိုက်ရိုက်ပြောင်းပေးနိုင်ပါသည်။")
     except:
         await update.effective_message.reply_text("❌ အချက်အလက်များ မှားယွင်းနေပါသည်။")
 
@@ -292,7 +345,7 @@ async def password_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     chars = string.ascii_letters + string.digits + "!@#$%^&*"
     pwd = "".join(random.choice(chars) for _ in range(12))
-    await update.effective_message.reply_text(f"🔑 **လုံခြုံသော စကားဝှက်အသစ်:**\n\n`{pwd}`\n\n(ကူးယူအသုံးပြုနိုင်ပါပြီ)")
+    await update.effective_message.reply_text(f"🔑 **လုံခြုံသော စကားဝှက်အသစ်:**\n\n`{pwd}`")
 
 async def qr_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
@@ -376,6 +429,8 @@ def main():
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("rate", rate_command))
     app.add_handler(CommandHandler("tr", translate_command))
+    app.add_handler(CommandHandler("define", define_command))
+    app.add_handler(CommandHandler("quote", quote_command))
     app.add_handler(CommandHandler("time", time_command))
     app.add_handler(CommandHandler("bmi", bmi_command))
     app.add_handler(CommandHandler("water", water_command))
