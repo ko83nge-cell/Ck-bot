@@ -88,30 +88,85 @@ def get_exchange_rates():
     except:
         return None
 
-def smart_ai_chat(prompt):
-    """မေးသမျှကို မြန်မာလို အဓိပ္ပာယ်ရှိရှိ ပြန်ပေးမည့် AI စနစ်"""
-    prompt_lower = prompt.lower()
-    if any(w in prompt_lower for w in ["မင်္ဂလာပါ", "hello", "hi", "ောင်ရိုး"]):
-        return "မင်္ဂလာပါရှင့်။ Ck_helpbot မှ ကြိုဆိုပါတယ်။ ယနေ့ ဘယ်လိုအကူအညီပေးရမလဲဗျ။"
-    if "နေကောင်းလား" in prompt_lower or "how are you" in prompt_lower:
-        return "ကျေးဇူးတင်ပါတယ်၊ ကျွန်တော် နေကောင်းပါတယ်။ သင်ရော နေကောင်းရဲ့လားရှင့်။"
-    
-    # Wikipedia မှ ရှာဖွေပြီး မြန်မာလို ပြန်ဆိုပေးခြင်း
+def free_social_ai_chat(prompt):
     try:
-        wiki_res = requests.get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(prompt.replace(' ', '_'))}", timeout=HTTP_TIMEOUT).json()
-        if isinstance(wiki_res, dict) and wiki_res.get("extract"):
-            return translate_text(wiki_res.get("extract"), "my")
-    except:
-        pass
+        ai_url = f"https://text.pollinations.ai/{quote('You are a friendly, polite, and warm Burmese AI assistant. Reply naturally and helpfully in Burmese: ' + prompt)}"
+        res = requests.get(ai_url, timeout=20)
+        if res.status_code == 200 and res.text.strip():
+            return res.text.strip()
+    except Exception as e:
+        logger.error(f"AI Chat error: {e}")
+    return translate_text(f"မင်္ဂလာပါရှင့်၊ '{prompt}' နဲ့ ပတ်သက်ပြီး ကျွန်တော် ကူညီပေးနိုင်ပါတယ်။", "my")
+
+
+# ---------------------- Channel join verification ------------------
+
+def channel_join_url():
+    if CHANNEL_URL:
+        return CHANNEL_URL
+    username = CHANNEL_USERNAME.lstrip("@")
+    return f"https://t.me/{username}" if username else ""
+
+async def is_channel_member(context, user_id):
+    if not CHANNEL_USERNAME:
+        return True
+    try:
+        member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
+        status = getattr(member, "status", "")
+        if status in ("creator", "administrator", "member"):
+            return True
+        return status == "restricted" and bool(getattr(member, "is_member", False))
+    except Exception:
+        return None
+
+async def require_channel_join(update, context):
+    user = update.effective_user
+    message = update.effective_message
+    if not user or user.id in ADMIN_IDS or not CHANNEL_USERNAME:
+        return True
     
-    # အထွေထွေ မေးခွန်းများအတွက် မြန်မာလို အလိုအလျောက် ဘာသာပြန်ဖြေကြားပေးခြင်း
-    fallback_reply = f"မေးမြန်းချက် '{prompt}' နှင့် ပတ်သက်ပြီး လက်ရှိတွင် ဤအချက်အလက်ကို ရရှိထားပါသည်။ လိုအပ်သည်များကို ထပ်မံမေးမြန်းနိုင်ပါသည်။"
-    return translate_text(fallback_reply, "my")
+    membership = await is_channel_member(context, user.id)
+    if membership is True:
+        return True
+    
+    buttons = []
+    url = channel_join_url()
+    if url:
+        buttons.append([InlineKeyboardButton("📢 Channel Join", url=url)])
+    buttons.append([InlineKeyboardButton("✅ Join ပြီးပါပြီ", callback_data="check_channel_join")])
+    keyboard = InlineKeyboardMarkup(buttons)
+    
+    notice = "🔒 ဘော့ကို ဆက်လက်အသုံးပြုရန် အောက်ပါ Channel ကို အရင် Join လုပ်ပေးပါ။"
+    if update.callback_query:
+        await update.callback_query.answer()
+        if update.callback_query.message:
+            await update.callback_query.message.reply_text(notice, reply_markup=keyboard)
+    elif message:
+        await message.reply_text(notice, reply_markup=keyboard)
+    return False
+
+async def check_channel_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not query:
+        return
+    user = query.from_user
+    membership = await is_channel_member(context, user.id)
+    if membership is True:
+        await query.answer("✅ အတည်ပြုပြီးပါပြီ။")
+        if query.message:
+            await query.message.reply_text("🎉 အတည်ပြုပြီးပါပြီ။ ယခု Bot ကို အသုံးပြုနိုင်ပါပြီ။ /start ကို နှိပ်ပါ။")
+    else:
+        await query.answer("Channel ကို မတွေ့ရသေးပါ။ ကျေးဇူးပြု၍ Join ပါ.", show_alert=True)
+
+
+# ---------------------- Command Handlers ------------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     await update.effective_message.reply_text(
-        "🤖 **Ck_helpbot (Utility & Chat Version)** မှ ကြိုဆိုပါတယ်။\n\n"
-        "💬 မည်သည့်စာသားကိုမဆို ရိုက်ပို့၍ ဆွေးနွေးမေးမြန်းနိုင်ပါပြီ။\n\n"
+        "🤖 **Ck_helpbot (Channel Gated & Smart AI Version)** မှ ကြိုဆိုပါတယ်။\n\n"
+        "💬 မည်သည့်စာသားကိုမဆို ရိုက်ပို့၍ ဖော်ရွေစွာ စကားပြောဆိုနိုင်ပါပြီ။\n\n"
         "🛠️ **အသုံးဝင်သော အမိန့်ခေါ်ဆိုမှုများ:**\n"
         "🌤️ `/weather မြို့နာမည်` - ရာသီဥတုကြည့်ရန်\n"
         "💱 `/rate` - နိုင်ငံခြားငွေလဲနှုန်းများ\n"
@@ -124,9 +179,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     await update.effective_message.reply_text("📖 အကူအညီအတွက် /start ကိုနှိပ်ပါ။")
 
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     query = " ".join(context.args).strip()
     if not query:
         await update.effective_message.reply_text("အသုံးပြုပုံ: `/weather Yangon`")
@@ -135,10 +194,14 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(res or "❌ ရာသီဥတု အချက်အလက် ရှာမတွေ့ပါ။")
 
 async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     res = await asyncio.to_thread(get_exchange_rates)
     await update.effective_message.reply_text(res or "❌ ငွေလဲနှုန်း ရယူမရပါ။")
 
 async def translate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     args = context.args
     if not args:
         await update.effective_message.reply_text("အသုံးပြုပုံ:\n• မြန်မာလိုပြန်ရန်: `/tr welcome`\n• အခြားဘာသာပြန်ရန်: `/tr en မင်္ဂလာပါ`")
@@ -155,10 +218,14 @@ async def translate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(f"🔤 **ဘာသာပြန်ဆိုချက် ({target_lang}):**\n\n{res}")
 
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     now = datetime.now().strftime("%Y-%m-%d | %H:%M:%S")
     await update.effective_message.reply_text(f"⏰ **လက်ရှိ အချိန်နှင့် ရက်စွဲ:**\n\n📅 {now}")
 
 async def bmi_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     args = context.args
     if len(args) < 2:
         await update.effective_message.reply_text("အသုံးပြုပုံ: `/bmi အရပ်(စင်တီမီတာ) ကိုယ်အလေးချိန်(ကီလို)`\nဥပမာ: `/bmi 170 65`")
@@ -172,14 +239,18 @@ async def bmi_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("❌ ဂဏန်းများကို မှန်ကန်စွာ ထည့်သွင်းပါ။")
 
 async def qr_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     text = " ".join(context.args).strip()
     if not text:
         await update.effective_message.reply_text("အသုံးပြုပုံ: `/qr စာသား သို့မဟုတ် လင့်ခ်`")
         return
     qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={quote(text)}"
-    await update.effective_photo(photo=qr_url, caption=f"📱 QR Code: {text[:100]}")
+    await update.effective_message.reply_photo(photo=qr_url, caption=f"📱 QR Code: {text[:100]}")
 
 async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     user = update.effective_user
     text = " ".join(context.args).strip()
     if not text:
@@ -191,6 +262,8 @@ async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("✅ မှတ်စုကို သိမ်းဆည်းပြီးပါပြီ။")
 
 async def mynotes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     user = update.effective_user
     with sqlite3.connect(DB_PATH, timeout=30) as db:
         rows = db.execute("SELECT note_text FROM notes WHERE user_id = ? ORDER BY id DESC LIMIT 10", (user.id,)).fetchall()
@@ -201,19 +274,22 @@ async def mynotes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("\n".join(lines))
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
     message = update.effective_message
     if not message or not message.text: return
     query = message.text.strip()
     if not query or query.startswith("/"): return
 
     await context.bot.send_chat_action(chat_id=message.chat_id, action="typing")
-    resp = await asyncio.to_thread(smart_ai_chat, query)
-    await update.effective_message.reply_text(f"🤖 **Bot Assistant:**\n\n{resp}")
+    resp = await asyncio.to_thread(free_social_ai_chat, query)
+    await update.effective_message.reply_text(resp)
 
 def main():
     if not TOKEN: raise RuntimeError("BOT_TOKEN မရှိပါ။")
     init_db()
     app = Application.builder().token(TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("weather", weather_command))
@@ -224,7 +300,9 @@ def main():
     app.add_handler(CommandHandler("qr", qr_command))
     app.add_handler(CommandHandler("note", note_command))
     app.add_handler(CommandHandler("mynotes", mynotes_command))
+    app.add_handler(CallbackQueryHandler(check_channel_join_callback, pattern="^check_channel_join$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
