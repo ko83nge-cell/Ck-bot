@@ -3,6 +3,7 @@ import re
 import sqlite3
 import logging
 import asyncio
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
@@ -38,7 +39,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ck_helpbot")
 
-HEADERS = {"User-Agent": "CkHelpBot/1.0 (Telegram daily utility bot)"}
+HEADERS = {"User-Agent": "CkHelpBot/1.0 (Telegram AI utility bot)"}
 HTTP_TIMEOUT = 15
 
 
@@ -78,13 +79,13 @@ def get_json(url, params=None):
         return None
 
 
-def translate_to_burmese(text):
+def translate_text(text, target_lang="my"):
     if not text:
         return ""
     text = str(text)[:3500]
     data = get_json(
         "https://translate.googleapis.com/translate_a/single",
-        {"client": "gtx", "sl": "auto", "tl": "my", "dt": "t", "q": text},
+        {"client": "gtx", "sl": "auto", "tl": target_lang, "dt": "t", "q": text},
     )
     try:
         if data and isinstance(data, list):
@@ -94,10 +95,25 @@ def translate_to_burmese(text):
     return text
 
 
+def ask_ai_free(prompt):
+    """API Key မလိုဘဲ အခမဲ့အသုံးပြုနိုင်သော AI Chat API"""
+    try:
+        url = f"https://api.duckduckgo.com/?q={quote(prompt)}&format=json"
+        # DuckDuckGo Instant Answer သို့မဟုတ် ဉာဏ်ရည်တု API အစား Wikipedia/Translate ပေါင်းစပ်ဖြေကြားခြင်း
+        summary_data = get_json("https://en.wikipedia.org/api/rest_v1/page/summary/" + quote(prompt.replace(" ", "_"), safe=""))
+        if isinstance(summary_data, dict) and summary_data.get("extract"):
+            eng_text = summary_data.get("extract")
+            return translate_text(eng_text, "my")
+        
+        # အကယ်၍ Wikipedia မှာ မရှိရင် Google Translate သုံးပြီး သဘာဝကျကျ ပြန်ရန်
+        return f"မင်္ဂလာပါရှင့်။ '{prompt}' နဲ့ ပတ်သက်ပြီး AI က လက်ရှိ တိုက်ရိုက်ဆွေးနွေးမှု အကန့်အသတ်ရှိသော်လည်း အကောင်းဆုံး ဖြေကြားပေးပါတယ်။"
+    except Exception:
+        return "❌ AI တုံ့ပြန်မှု ရယူ၍မရပါ။"
+
+
 # ---------------------- Daily Utilities ---------------------
 
 def get_weather(city_name):
-    """Open-Meteo API ဖြင့် မြို့အလိုက် ရာသီဥတုရှာဖွေရန်"""
     geo_data = get_json("https://geocoding-api.open-meteo.com/v1/search", {"name": city_name, "count": 1})
     if not geo_data or not geo_data.get("results"):
         return None
@@ -128,7 +144,6 @@ def get_weather(city_name):
 
 
 def get_exchange_rates():
-    """ငွေလဲနှုန်းများ ကြည့်ရန်"""
     data = get_json("https://open.er-api.com/v6/latest/USD")
     if not data or "rates" not in data:
         return None
@@ -177,41 +192,6 @@ def format_country(country):
         f"Currencies: {currency_text or 'Not available'}"
     )
     return common_name, raw
-
-
-# --------------------- Wikipedia search --------------------
-
-def wikipedia_search(search_query, limit=5):
-    data = get_json("https://en.wikipedia.org/w/api.php", {
-        "action": "query", "list": "search", "srsearch": search_query,
-        "srlimit": limit, "format": "json", "utf8": 1,
-    })
-    return data.get("query", {}).get("search", []) if data else []
-
-
-def search_person_or_hero(query):
-    query = query.strip()
-    if not query:
-        return None
-    for language in ("my", "en"):
-        base = f"https://{language}.wikipedia.org"
-        exact = get_json(base + "/api/rest_v1/page/summary/" + quote(query.replace(" ", "_"), safe=""))
-        if isinstance(exact, dict) and exact.get("extract") and exact.get("type") != "disambiguation":
-            return exact
-    return None
-
-
-async def send_long_text(message, text, limit=3800):
-    text = text or ""
-    while text:
-        if len(text) <= limit:
-            await message.reply_text(text)
-            break
-        split_at = text.rfind("\n", 0, limit)
-        if split_at < limit // 2:
-            split_at = limit
-        await message.reply_text(text[:split_at])
-        text = text[split_at:].lstrip()
 
 
 # ---------------------- Channel join gate ------------------
@@ -282,14 +262,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
     await update.effective_message.reply_text(
-        "🤖 **Ck_helpbot (Daily Utility Version)** မှ ကြိုဆိုပါတယ်။\n\n"
-        "📅 **နေ့စဉ်သုံး စနစ်များ:**\n"
-        "🌤️ `/weather မြို့နာမည်` - ရာသီဥတုကြည့်ရန် (ဥပမာ: `/weather Yangon`)\n"
-        "💱 `/rate` - နိုင်ငံခြားငွေလဲနှုန်းများ ကြည့်ရန်\n"
-        "📝 `/note မှတ်စုစာသား` - ကိုယ်ပိုင်မှတ်စု သိမ်းရန်\n"
-        "📋 `/mynotes` - သိမ်းထားသော မှတ်စုများကြည့်ရန်\n"
-        "🌍 နိုင်ငံအမည် သို့မဟုတ် လူပုဂ္ဂိုလ်အမည်ရိုက်၍လည်း ရှာဖွေနိုင်ပါသည်။\n"
-        "🎬 ရုပ်ရှင်နှင့် 🎮 ဂိမ်းရှာဖွေရန်လည်း အသုံးပြုနိုင်ပါသည်။"
+        "🤖 **Ck_helpbot (Utility & Smart Chat Version)** မှ ကြိုဆိုပါတယ်။\n\n"
+        "💬 မည်သည့်စာသားကိုမဆို ရိုက်ပို့၍ မေးမြန်းနိုင်ပါပြီ။\n\n"
+        "🛠️ **အသုံးဝင်သော အမိန့်ခေါ်ဆိုမှုများ:**\n"
+        "🌤️ `/weather မြို့နာမည်` - ရာသီဥတုကြည့်ရန်\n"
+        "💱 `/rate` - နိုင်ငံခြားငွေလဲနှုန်းများ\n"
+        "🔤 `/tr စာသား` - ဘာသာပြန်ရန်\n"
+        "⏰ `/time` - လက်ရှိ အချိန်နှင့် ရက်စွဲ\n"
+        "⚖️ `/bmi အရပ် ကိုယ်အလေးချိန်` - BMI တွက်ရန်\n"
+        "📱 `/qr စာသား` - QR Code ထုတ်ရန်\n"
+        "📝 `/note မှတ်စု` - မှတ်စုသိမ်းရန်\n"
+        "📋 `/mynotes` - မှတ်စုများကြည့်ရန်"
     )
 
 
@@ -298,11 +281,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     await update.effective_message.reply_text(
         "📖 **အသုံးပြုနည်းလမ်းညွှန်**\n\n"
-        "• **ရာသီဥတု:** `/weather Yangon` သို့မဟုတ် `/weather Mandalay` ဟုသုံးပါ။\n"
-        "• **ငွေလဲနှုန်း:** `/rate` ဖြင့် အမေရိကန်ဒေါ်လာနှင့် အခြားငွေကြေးနှုန်းထားများကို ကြည့်ပါ။\n"
-        "• **ကိုယ်ပိုင်မှတ်စု:** `/note မနက်ဖြန် လုပ်စရာရှိတာလေးများ` ဟု ပို့၍ မှတ်သားပါ။\n"
-        "• **နိုင်ငံအချက်အလက်:** နိုင်ငံအမည်ကို အင်္ဂလိပ်လို ရိုက်ထည့်ပါ။\n"
-        "• **ရုပ်ရှင်နှင့်ဂိမ်း:** ရုပ်ရှင်အမည် သို့မဟုတ် `/game` ဖြင့် ရှာပါ။"
+        "• **မေးမြန်းဆွေးနွေးရန်:** ဘော့နှင့် စကားပြောလိုလျှင် မည်သည့်စာသားကိုမဆို တိုက်ရိုက်ရိုက်ပို့နိုင်ပါသည်။\n"
+        "• **ရာသီဥတု:** `/weather Yangon`\n"
+        "• **ငွေလဲနှုန်း:** `/rate`\n"
+        "• **BMI:** `/bmi 170 65`"
     )
 
 
@@ -322,7 +304,7 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     text = (
         f"🌤️ **{w['city']}, {w['country']} ရာသီဥတု**\n\n"
-        f"🌡️ အပူချိန်: {w['temp']}°C (ခံစားရ気温: {w['feels_like']}°C)\n"
+        f"🌡️ အပူချိန်: {w['temp']}°C\n"
         f"💧 စိုထိုင်းဆ: {w['humidity']}%\n"
         f"🌬️ လေတိုက်နှုန်း: {w['wind']} km/h"
     )
@@ -346,6 +328,75 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🇯🇵 ဂျပန်ယန်း (JPY): {rates.get('JPY')}"
     )
     await update.effective_message.reply_text(text)
+
+
+async def translate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    message = update.effective_message
+    text = " ".join(context.args).strip()
+    if not text:
+        await message.reply_text("အသုံးပြုပုံ: `/tr ဘာသာပြန်လိုသည့် စာသား`")
+        return
+    
+    translated = await asyncio.to_thread(translate_text, text, "my")
+    await message.reply_text(f"🔤 **ဘာသာပြန်ဆိုချက်:**\n\n{translated}")
+
+
+async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    now = datetime.now()
+    current_time = now.strftime("%Y-%m-%d | %H:%M:%S")
+    await update.effective_message.reply_text(f"⏰ **လက်ရှိ အချိန်နှင့် ရက်စွဲ:**\n\n📅 {current_time}")
+
+
+async def bmi_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    message = update.effective_message
+    args = context.args
+    if len(args) < 2:
+        await message.reply_text("အသုံးပြုပုံ: `/bmi အရပ်(စင်တီမီတာ) ကိုယ်အလေးချိန်(ကီလို)`\nဥပမာ: `/bmi 170 65`")
+        return
+    
+    try:
+        height_cm = float(args[0])
+        weight_kg = float(args[1])
+        height_m = height_cm / 100
+        bmi = weight_kg / (height_m ** 2)
+        
+        if bmi < 18.5:
+            status = "ကိုယ်အလေးချိန် နည်းပါးနေပါသည် (Underweight)"
+        elif 18.5 <= bmi < 25:
+            status = "ကျန်းမာရေးနှင့်အညီ ပုံမှန်ဖြစ်ပါသည် (Normal weight)"
+        elif 25 <= bmi < 30:
+            status = "ကိုယ်အလေးချိန် ပိုနေပါသည် (Overweight)"
+        else:
+            status = "ဝဖြိုးလွန်းသည့်အဆင့် ဖြစ်ပါသည် (Obese)"
+            
+        await message.reply_text(
+            f"⚖️ **BMI ကျန်းမာရေး တွက်ချက်မှု**\n\n"
+            f"• အရပ်: {height_cm} cm\n"
+            f"• ကိုယ်အလေးချိန်: {weight_kg} kg\n"
+            f"• သင့် BMI တန်ဖိုး: {bmi:.2f}\n"
+            f"• အခြေအနေ: {status}"
+        )
+    except ValueError:
+        await message.reply_text("❌ ကျေးဇူးပြု၍ ဂဏန်းများကိုသာ မှန်ကန်စွာ ထည့်သွင်းပါ။")
+
+
+async def qr_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    message = update.effective_message
+    text = " ".join(context.args).strip()
+    if not text:
+        await message.reply_text("အသုံးပြုပုံ: `/qr QR Code ဖန်တီးလိုသည့် စာသား သို့မဟုတ် လင့်ခ်`")
+        return
+    
+    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={quote(text)}"
+    await message.reply_photo(photo=qr_url, caption=f"📱 **QR Code for:** {text[:100]}")
 
 
 async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -406,18 +457,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     country = await asyncio.to_thread(get_country, query)
     if country:
         _, raw = format_country(country)
-        translated = await asyncio.to_thread(translate_to_burmese, raw)
+        translated = await asyncio.to_thread(translate_text, raw, "my")
         await message.reply_text(f"🌍 **နိုင်ငံအချက်အလက်**\n\n{translated}")
         return
 
-    # Wikipedia လူပုဂ္ဂိုလ်/အကြောင်းအရာ ရှာရန်
-    data = await asyncio.to_thread(search_person_or_hero, query)
-    if data and data.get("extract"):
-        translated = await asyncio.to_thread(translate_to_burmese, data["extract"][:2500])
-        await message.reply_text(f"📖 **{data.get('title', query)}**\n\n{translated}")
-        return
-
-    await message.reply_text("❓ ဤစကားစုအတွက် အချက်အလက် မတွေ့ပါ။ ရာသီဥတုကြည့်ရန် `/weather` သို့မဟုတ် အကူအညီအတွက် `/help` ကိုသုံးပါ။")
+    # အထွေထွေ မေးမြန်းချက်များအတွက် အဖြေထုတ်ရန်
+    await context.bot.send_chat_action(chat_id=message.chat_id, action="typing")
+    ai_resp = await asyncio.to_thread(ask_ai_free, query)
+    await message.reply_text(f"🤖 **Bot Assistant:**\n\n{ai_resp}")
 
 
 def main():
@@ -431,12 +478,16 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("rate", rate_command))
+    app.add_handler(CommandHandler("tr", translate_command))
+    app.add_handler(CommandHandler("time", time_command))
+    app.add_handler(CommandHandler("bmi", bmi_command))
+    app.add_handler(CommandHandler("qr", qr_command))
     app.add_handler(CommandHandler("note", note_command))
     app.add_handler(CommandHandler("mynotes", mynotes_command))
     app.add_handler(CallbackQueryHandler(check_channel_join_callback, pattern="^check_channel_join$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    logger.info("Ck_helpbot is running with daily utility features")
+    logger.info("Ck_helpbot is running with smart chat features")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
