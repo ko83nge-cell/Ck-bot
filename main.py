@@ -27,7 +27,6 @@ ADMIN_IDS = {
 DB_PATH = os.getenv("DB_PATH", "movies_bot.db")
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "").strip()
 CHANNEL_URL = os.getenv("CHANNEL_URL", "").strip()
-GAME_CHANNEL_ID = os.getenv("GAME_CHANNEL_ID", "").strip()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 logger = logging.getLogger("ck_helpbot")
@@ -55,7 +54,16 @@ def get_json(url, params=None):
 
 def translate_text(text, target_lang="my"):
     if not text: return ""
-    data = get_json("https://translate.googleapis.com/translate_a/single", {"client": "gtx", "sl": "auto", "tl": target_lang, "dt": "t", "q": str(text)[:3500]})
+    # Google Translate API endpoint ကို တိကျမှန်ကန်စွာ ပြင်ဆင်ထားသည်
+    url = "https://translate.googleapis.com/translate_a/single"
+    params = {
+        "client": "gtx",
+        "sl": "auto",
+        "tl": target_lang,
+        "dt": "t",
+        "q": str(text)[:3500]
+    }
+    data = get_json(url, params=params)
     try:
         if data and isinstance(data, list):
             return "".join(part[0] for part in data[0] if part and part[0])
@@ -94,12 +102,12 @@ def smart_ai_chat(prompt):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
-        "🤖 **Ck_helpbot (All-in-One Utility & Chat Version)** မှ ကြိုဆိုပါတယ်။\n\n"
+        "🤖 **Ck_helpbot (Utility & Chat Version)** မှ ကြိုဆိုပါတယ်။\n\n"
         "💬 မည်သည့်စာသားကိုမဆို ရိုက်ပို့၍ ဆွေးနွေးမေးမြန်းနိုင်ပါပြီ။\n\n"
         "🛠️ **အသုံးဝင်သော အမိန့်ခေါ်ဆိုမှုများ:**\n"
         "🌤️ `/weather မြို့နာမည်` - ရာသီဥတုကြည့်ရန်\n"
         "💱 `/rate` - နိုင်ငံခြားငွေလဲနှုန်းများ\n"
-        "🔤 `/tr စာသား` - ဘာသာပြန်ရန်\n"
+        "🔤 `/tr စာသား` - မြန်မာလို ဘာသာပြန်ရန် (သို့) `/tr en စာသား`\n"
         "⏰ `/time` - လက်ရှိ အချိန်နှင့် ရက်စွဲ\n"
         "⚖️ `/bmi အရပ် ကိုယ်အလေးချိန်` - BMI တွက်ရန်\n"
         "📱 `/qr စာသား` - QR Code ထုတ်ရန်\n"
@@ -108,7 +116,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("📖 အကူအညီအတွက် /start ကိုနှိပ်၍ အမိန့်ခေါ်ဆိုမှုများကို ကြည့်ရှုနိုင်ပါသည်။")
+    await update.effective_message.reply_text("📖 အကူအညီအတွက် /start ကိုနှိပ်ပါ။")
 
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = " ".join(context.args).strip()
@@ -123,12 +131,21 @@ async def rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(res or "❌ ငွေလဲနှုန်း ရယူမရပါ။")
 
 async def translate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = " ".join(context.args).strip()
-    if not text:
-        await update.effective_message.reply_text("အသုံးပြုပုံ: `/tr ဘာသာပြန်လိုသည့်စာသား`")
+    args = context.args
+    if not args:
+        await update.effective_message.reply_text("အသုံးပြုပုံ:\n• မြန်မာလိုပြန်ရန်: `/tr welcome`\n• အခြားဘာသာပြန်ရန်: `/tr en မင်္ဂလာပါ`")
         return
-    res = await asyncio.to_thread(translate_text, text, "my")
-    await update.effective_message.reply_text(f"🔤 **ဘာသာပြန်ဆိုချက်:**\n\n{res}")
+    
+    # ဥပမာ - /tr en မင်္ဂလာပါ လို့ရိုက်ရင် args[0] က 'en' ဖြစ်မယ်
+    if len(args) > 1 and len(args[0]) == 2:
+        target_lang = args[0]
+        text_to_translate = " ".join(args[1:])
+    else:
+        target_lang = "my" # မပါရင် မြန်မာလို ပုံသေပြန်ပေးမည်
+        text_to_translate = " ".join(args)
+
+    res = await asyncio.to_thread(translate_text, text_to_translate, target_lang)
+    await update.effective_message.reply_text(f"🔤 **ဘာသာပြန်ဆိုချက် ({target_lang}):**\n\n{res}")
 
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = datetime.now().strftime("%Y-%m-%d | %H:%M:%S")
