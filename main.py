@@ -3,6 +3,8 @@ import re
 import sqlite3
 import logging
 import asyncio
+import random
+import string
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -43,12 +45,18 @@ def init_db():
                 note_text TEXT NOT NULL
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS todos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                task_text TEXT NOT NULL
+            )
+        """)
         db.commit()
 
 def translate_text(text, target_lang="my"):
     if not text: return ""
     try:
-        # AI ကို အသုံးပြု၍ ပိုမိုတိကျသဘာဝကျသော ဘာသာပြန်ဆိုမှု ပြုလုပ်ခြင်း
         lang_name = "Burmese (Myanmar)" if target_lang == "my" else target_lang
         ai_url = f"https://text.pollinations.ai/{quote(f'Translate the following text accurately into {lang_name}. Provide ONLY the translated text without extra explanation: ' + text)}"
         res = requests.get(ai_url, timeout=20)
@@ -164,17 +172,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
     await update.effective_message.reply_text(
-        "🤖 **Ck_helpbot (Smart AI & Utility Version)** မှ ကြိုဆိုပါတယ်။\n\n"
+        "🤖 **Ck_helpbot (Ultimate Daily Utility Version)** မှ ကြိုဆိုပါတယ်။\n\n"
         "💬 မည်သည့်စာသားကိုမဆို ရိုက်ပို့၍ ဖော်ရွေစွာ စကားပြောဆိုနိုင်ပါပြီ။\n\n"
-        "🛠️ **အသုံးဝင်သော အမိန့်ခေါ်ဆိုမှုများ:**\n"
+        "🛠️ **နေ့စဉ်သုံး အမိန့်ခေါ်ဆိုမှုများ:**\n"
         "🌤️ `/weather မြို့နာမည်` - ရာသီဥတုကြည့်ရန်\n"
         "💱 `/rate` - နိုင်ငံခြားငွေလဲနှုန်းများ\n"
-        "🔤 `/tr စာသား` (သို့) `/tr en မင်္ဂလာပါ` - ဘာသာပြန်ရန်\n"
+        "🔤 `/tr စာသား` (သို့) `/tr en စာသား` - ဘာသာပြန်ရန်\n"
         "⏰ `/time` - လက်ရှိ အချိန်နှင့် ရက်စွဲ\n"
         "⚖️ `/bmi အရပ် ကိုယ်အလေးချိန်` - BMI တွက်ရန်\n"
+        "💧 `/water ကိုယ်အလေးချိန်(ကီလို)` - ရေဓာတ်သောက်ရန်ပမာဏ\n"
+        "🔄 `/conv kg lb 50` - ယူနစ်ပြောင်းရန်\n"
+        "🔑 `/password` - လုံခြုံသော စကားဝှက်ဖန်တီးရန်\n"
         "📱 `/qr စာသား` - QR Code ထုတ်ရန်\n"
         "📝 `/note မှတ်စု` - မှတ်စုသိမ်းရန်\n"
-        "📋 `/mynotes` - မှတ်စုများကြည့်ရန်"
+        "📋 `/mynotes` - မှတ်စုများကြည့်ရန်\n"
+        "✅ `/todo လုပ်စရာ` - လုပ်စရာစာရင်းထည့်ရန်\n"
+        "📌 `/mytodos` - လုပ်စရာစာရင်းများကြည့်ရန်"
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -237,6 +250,50 @@ async def bmi_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         await update.effective_message.reply_text("❌ ဂဏန်းများကို မှန်ကန်စွာ ထည့်သွင်းပါ။")
 
+async def water_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    args = context.args
+    if not args:
+        await update.effective_message.reply_text("အသုံးပြုပုံ: `/water ကိုယ်အလေးချိန်(ကီလို)`\nဥပမာ: `/water 60`")
+        return
+    try:
+        weight = float(args[0])
+        water_ml = weight * 35  # 1 kg = 35 ml roughly
+        water_liters = water_ml / 1000
+        await update.effective_message.reply_text(f"💧 **ရေဓာတ်သောက်သုံးရန် ညွှန်ကြားချက်**\n\n• ကိုယ်အလေးချိန်: {weight} kg\n• တစ်နေ့တာ သောက်သင့်သော ရေပမာဏ: **{water_liters:.2f} လီတာ** (ခန့်မှန်းခြေ ဖန်ခွက် {int(water_ml / 250)} ခွက်ခန့်)")
+    except:
+        await update.effective_message.reply_text("❌ ကိုယ်အလေးချိန်ကို ဂဏန်းဖြင့် မှန်ကန်စွာ ထည့်ပါ။")
+
+async def convert_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    args = context.args
+    if len(args) < 3:
+        await update.effective_message.reply_text("အသုံးပြုပုံ: `/conv ယူနစ်ဟောင်း ယူနစ်သစ် ပမာဏ`\nဥပမာ: `/conv kg lb 50` (သို့မဟုတ်) `/conv c f 30`")
+        return
+    try:
+        u_from, u_to, val = args[0].lower(), args[1].lower(), float(args[2])
+        res = None
+        if u_from == "kg" and u_to == "lb": res = val * 2.20462
+        elif u_from == "lb" and u_from == "kg": res = val / 2.20462
+        elif u_from == "c" and u_to == "f": res = (val * 9/5) + 32
+        elif u_from == "f" and u_to == "c": res = (val - 32) * 5/9
+        
+        if res is not None:
+            await update.effective_message.reply_text(f"🔄 **ယူနစ်ပြောင်းလဲမှု:**\n\n{val} {u_from.upper()} = **{res:.2f} {u_to.upper()}**")
+        else:
+            await update.effective_message.reply_text("❌ လက်ရှိတွင် kg/lb နှင့် c/f (Temperature) များကိုသာ တိုက်ရိုက်ပြောင်းပေးနိုင်ပါသည်။")
+    except:
+        await update.effective_message.reply_text("❌ အချက်အလက်များ မှားယွင်းနေပါသည်။")
+
+async def password_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    chars = string.ascii_letters + string.digits + "!@#$%^&*"
+    pwd = "".join(random.choice(chars) for _ in range(12))
+    await update.effective_message.reply_text(f"🔑 **လုံခြုံသော စကားဝှက်အသစ်:**\n\n`{pwd}`\n\n(ကူးယူအသုံးပြုနိုင်ပါပြီ)")
+
 async def qr_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
@@ -272,6 +329,31 @@ async def mynotes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = ["📝 **သင်၏ မှတ်စုများ:**\n"] + [f"{i}. {r[0]}" for i, r in enumerate(rows, 1)]
     await update.effective_message.reply_text("\n".join(lines))
 
+async def todo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    user = update.effective_user
+    text = " ".join(context.args).strip()
+    if not text:
+        await update.effective_message.reply_text("အသုံးပြုပုံ: `/todo လုပ်စရာရှိသည့်အလုပ်`")
+        return
+    with sqlite3.connect(DB_PATH, timeout=30) as db:
+        db.execute("INSERT INTO todos (user_id, task_text) VALUES (?, ?)", (user.id, text))
+        db.commit()
+    await update.effective_message.reply_text("✅ လုပ်စရာစာရင်းထဲသို့ ထည့်သွင်းပြီးပါပြီ။")
+
+async def mytodos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    user = update.effective_user
+    with sqlite3.connect(DB_PATH, timeout=30) as db:
+        rows = db.execute("SELECT task_text FROM todos WHERE user_id = ? ORDER BY id DESC LIMIT 10", (user.id,)).fetchall()
+    if not rows:
+        await update.effective_message.reply_text("📭 လုပ်စရာစာရင်းများ မရှိသေးပါ။")
+        return
+    lines = ["✅ **သင်၏ လုပ်စရာစာရင်းများ (ToDo):**\n"] + [f"• {r[0]}" for r in rows]
+    await update.effective_message.reply_text("\n".join(lines))
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
@@ -296,9 +378,14 @@ def main():
     app.add_handler(CommandHandler("tr", translate_command))
     app.add_handler(CommandHandler("time", time_command))
     app.add_handler(CommandHandler("bmi", bmi_command))
+    app.add_handler(CommandHandler("water", water_command))
+    app.add_handler(CommandHandler("conv", convert_command))
+    app.add_handler(CommandHandler("password", password_command))
     app.add_handler(CommandHandler("qr", qr_command))
     app.add_handler(CommandHandler("note", note_command))
     app.add_handler(CommandHandler("mynotes", mynotes_command))
+    app.add_handler(CommandHandler("todo", todo_command))
+    app.add_handler(CommandHandler("mytodos", mytodos_command))
     app.add_handler(CallbackQueryHandler(check_channel_join_callback, pattern="^check_channel_join$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
