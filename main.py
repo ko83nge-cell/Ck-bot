@@ -52,6 +52,15 @@ def init_db():
                 task_text TEXT NOT NULL
             )
         """)
+        # သတင်းများ သိမ်းဆည်းရန် ဇယား (Bot နှင့် Channel နှစ်ခုလုံးအတွက်)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS news_store (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                news_title TEXT,
+                news_content TEXT UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         db.commit()
 
 def translate_text(text, target_lang="my"):
@@ -113,11 +122,20 @@ def get_dictionary_definition(word):
                     result_text += f"\n🔹 *{part_of_speech}*\n"
                     for d in definitions[:2]:
                         result_text += f"• {d.get('definition')}\n"
-                        if d.get("example"):
-                            result_text += f"  *(Ex: {d.get('example')})*\n"
                 return result_text
     except:
         pass
+    return None
+
+def fetch_latest_news(category="world"):
+    try:
+        prompt = f"Give me recent major {category} news summary in clear Burmese language with bullet points."
+        ai_url = f"https://text.pollinations.ai/{quote(prompt)}"
+        res = requests.get(ai_url, timeout=25)
+        if res.status_code == 200 and res.text.strip():
+            return res.text.strip()
+    except Exception as e:
+        logger.error(f"News fetch error: {e}")
     return None
 
 def free_social_ai_chat(prompt):
@@ -191,36 +209,67 @@ async def check_channel_join_callback(update: Update, context: ContextTypes.DEFA
         await query.answer("Channel ကို မတွေ့ရသေးပါ။ ကျေးဇူးပြု၍ Join ပါ.", show_alert=True)
 
 
+# ---------------------- Auto News Broadcast Job ------------------
+
+async def auto_news_broadcast_job(context: ContextTypes.DEFAULT_TYPE):
+    """သတင်းအသစ်များကို အလိုအလျောက် ဆွဲထုတ်ပြီး Database ထဲသိမ်းကာ Channel ထဲပို့ပေးမည့်စနစ်"""
+    news_text = await asyncio.to_thread(fetch_latest_news, "global and Myanmar breaking news")
+    if not news_text:
+        return
+
+    with sqlite3.connect(DB_PATH, timeout=30) as db:
+        # တူညီသောသတင်း ရှိမရှိ စစ်ဆေးခြင်း
+        cursor = db.execute("SELECT id FROM news_store WHERE news_content = ?", (news_text[:50],))
+        if cursor.fetchone():
+            return
+        
+        db.execute("INSERT INTO news_store (news_title, news_content) VALUES (?, ?)", ("Breaking/Latest News", news_text))
+        db.commit()
+
+    # Channel ထဲသို့ အလိုအလျောက် ပို့ရန်
+    if CHANNEL_USERNAME:
+        try:
+            broadcast_msg = f"📰 **သတင်းစုံနှင့် အရေးပေါ် Breaking News** 📰\n\n{news_text}"
+            await context.bot.send_message(chat_id=CHANNEL_USERNAME, text=broadcast_msg)
+            logger.info("News successfully auto-broadcasted to channel.")
+        except Exception as e:
+            logger.error(f"Auto news channel send error: {e}")
+
+
 # ---------------------- Command Handlers ------------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
     await update.effective_message.reply_text(
-        "🤖 **Ck_helpbot (Ultimate Daily Utility Version)** မှ ကြိုဆိုပါတယ်။\n\n"
-        "💬 မည်သည့်စာသားကိုမဆို ရိုက်ပို့၍ ဖော်ရွေစွာ စကားပြောဆိုနိုင်ပါပြီ။\n\n"
-        "🛠️ **နေ့စဉ်သုံး အမိန့်ခေါ်ဆိုမှုများ:**\n"
-        "🌤️ `/weather မြို့နာမည်` - ရာသီဥတုကြည့်ရန်\n"
-        "💱 `/rate` - နိုင်ငံခြားငွေလဲနှုန်းများ\n"
-        "🔤 `/tr စာသား` (သို့) `/tr en စာသား` - ဘာသာပြန်ရန်\n"
-        "📖 `/define စကားလုံး` - အင်္ဂလိပ်အဘိဓာန် ရှာရန်\n"
-        "💡 `/quote` - နေ့စဉ် အားပေးစကားများ\n"
-        "⏰ `/time` - လက်ရှိ အချိန်နှင့် ရက်စွဲ\n"
-        "⚖️ `/bmi အရပ် ကိုယ်အလေးချိန်` - BMI တွက်ရန်\n"
-        "💧 `/water ကိုယ်အလေးချိန်` - ရေဓာတ်သောက်ရန်ပမာဏ\n"
-        "🔄 `/conv kg lb 50` - ယူနစ်ပြောင်းရန်\n"
-        "🔑 `/password` - စကားဝှက်ဖန်တီးရန်\n"
-        "📱 `/qr စာသား` - QR Code ထုတ်ရန်\n"
-        "📝 `/note မှတ်စု` - မှတ်စုသိမ်းရန်\n"
-        "📋 `/mynotes` - မှတ်စုများကြည့်ရန်\n"
-        "✅ `/todo လုပ်စရာ` - လုပ်စရာစာရင်းထည့်ရန်\n"
-        "📌 `/mytodos` - လုပ်စရာစာရင်းများကြည့်ရန်"
+        "🤖 **Ck_helpbot (Dual News System)** မှ ကြိုဆိုပါတယ်။\n\n"
+        "📰 `/news` - Database ထဲရှိ နောက်ဆုံးရသတင်းများကို Bot ထဲတွင် ကြည့်ရှုရန်\n"
+        "💬 မည်သည့်စာသားကိုမဆို ရိုက်ပို့၍ AI နှင့် စကားပြောနိုင်ပါသည်။"
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
     await update.effective_message.reply_text("📖 အကူအညီအတွက် /start ကိုနှိပ်ပါ။")
+
+async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await require_channel_join(update, context):
+        return
+    
+    # Bot ထဲလာမေးသော အသုံးပြုသူများအတွက် Database ထဲက နောက်ဆုံးရသတင်းကို ထုတ်ပြပေးခြင်း
+    with sqlite3.connect(DB_PATH, timeout=30) as db:
+        cursor = db.execute("SELECT news_content FROM news_store ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+    
+    if row:
+        await update.effective_message.reply_text(f"🌐 **နောက်ဆုံးရ သတင်းများနှင့် Breaking News:**\n\n{row[0]}")
+    else:
+        # Database ထဲ မရှိသေးပါက ချက်ချင်း အသစ်ဆွဲထုတ်ပေးမည်
+        news_res = await asyncio.to_thread(fetch_latest_news, "global and Myanmar")
+        if news_res:
+            await update.effective_message.reply_text(f"🌐 **နောက်ဆုံးရ သတင်းများ:**\n\n{news_res}")
+        else:
+            await update.effective_message.reply_text("❌ သတင်း အချက်အလက် ခေတ္တမရရှိပါ။")
 
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
@@ -243,180 +292,99 @@ async def translate_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     args = context.args
     if not args:
-        await update.effective_message.reply_text("အသုံးပြုပုံ:\n• မြန်မာလိုပြန်ရန်: `/tr welcome`\n• အခြားဘာသာပြန်ရန်: `/tr en မင်္ဂလာပါ`")
+        await update.effective_message.reply_text("အသုံးပြုပုံ: `/tr en မင်္ဂလာပါ`")
         return
-    
-    if len(args) > 1 and len(args[0]) == 2:
-        target_lang = args[0]
-        text_to_translate = " ".join(args[1:])
-    else:
-        target_lang = "my"
-        text_to_translate = " ".join(args)
-
-    res = await asyncio.to_thread(translate_text, text_to_translate, target_lang)
-    await update.effective_message.reply_text(f"🔤 **ဘာသာပြန်ဆိုချက် ({target_lang}):**\n\n{res}")
+    res = await asyncio.to_thread(translate_text, " ".join(args[1:]) if len(args)>1 else " ".join(args), args[0] if len(args)>1 else "my")
+    await update.effective_message.reply_text(f"🔤 **ဘာသာပြန်ဆိုချက်:**\n\n{res}")
 
 async def define_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
     args = context.args
-    if not args:
-        await update.effective_message.reply_text("အသုံးပြုပုံ: `/define success`")
-        return
-    word = args[0].strip()
-    res = await asyncio.to_thread(get_dictionary_definition, word)
-    if res:
-        await update.effective_message.reply_text(res)
-    else:
-        await update.effective_message.reply_text(f"❌ '{word}' ၏ အဓိပ္ပာယ်ကို ရှာမတွေ့ပါ။")
+    if not args: return
+    res = await asyncio.to_thread(get_dictionary_definition, args[0].strip())
+    await update.effective_message.reply_text(res or "❌ အဓိပ္ပာယ် မတွေ့ပါ။")
 
 async def quote_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
-    try:
-        q_res = requests.get("https://api.quotable.io/random", timeout=HTTP_TIMEOUT).json()
-        content = q_res.get("content", "Keep going, you are doing great!")
-        author = q_res.get("author", "Unknown")
-        translated_q = await asyncio.to_thread(translate_text, f'"{content}" - {author}', "my")
-        await update.effective_message.reply_text(f"💡 **နေ့စဉ် ခွန်အားဖြစ်စေသော စကားစု:**\n\n{translated_q}")
-    except:
-        await update.effective_message.reply_text("💡 **နေ့စဉ် စကားစု:** ယုံကြည်မှုအပြည့်နဲ့ ရှေ့ဆက်ပါ။")
+    await update.effective_message.reply_text("💡 ယုံကြည်မှုအပြည့်နဲ့ ရှေ့ဆက်ပါ။")
 
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
-    now = datetime.now().strftime("%Y-%m-%d | %H:%M:%S")
-    await update.effective_message.reply_text(f"⏰ **လက်ရှိ အချိန်နှင့် ရက်စွဲ:**\n\n📅 {now}")
+    await update.effective_message.reply_text(f"⏰ {datetime.now().strftime('%Y-%m-%d | %H:%M:%S')}")
 
 async def bmi_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
     args = context.args
-    if len(args) < 2:
-        await update.effective_message.reply_text("အသုံးပြုပုံ: `/bmi အရပ်(စင်တီမီတာ) ကိုယ်အလေးချိန်(ကီလို)`\nဥပမာ: `/bmi 170 65`")
-        return
-    try:
-        h, w = float(args[0]) / 100, float(args[1])
-        bmi = w / (h ** 2)
-        status = "ပုံမှန်ဖြစ်ပါသည်" if 18.5 <= bmi < 25 else ("ကိုယ်အလေးချိန် နည်းနေပါသည်" if bmi < 18.5 else "ကိုယ်အလေးချိန် ပိုနေပါသည်")
-        await update.effective_message.reply_text(f"⚖️ **BMI:** {bmi:.2f}\n• အခြေအနေ: {status}")
-    except:
-        await update.effective_message.reply_text("❌ ဂဏန်းများကို မှန်ကန်စွာ ထည့်သွင်းပါ။")
+    if len(args) < 2: return
+    h, w = float(args[0]) / 100, float(args[1])
+    await update.effective_message.reply_text(f"⚖️ BMI: {w / (h ** 2):.2f}")
 
 async def water_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
     args = context.args
-    if not args:
-        await update.effective_message.reply_text("အသုံးပြုပုံ: `/water ကိုယ်အလေးချိန်(ကီလို)`\nဥပမာ: `/water 60`")
-        return
-    try:
-        weight = float(args[0])
-        water_ml = weight * 35
-        water_liters = water_ml / 1000
-        await update.effective_message.reply_text(f"💧 **ရေဓာတ်သောက်သုံးရန် ညွှန်ကြားချက်**\n\n• ကိုယ်အလေးချိန်: {weight} kg\n• တစ်နေ့တာ သောက်သင့်သော ရေပမာဏ: **{water_liters:.2f} လီတာ**")
-    except:
-        await update.effective_message.reply_text("❌ ကိုယ်အလေးချိန်ကို ဂဏန်းဖြင့် မှန်ကန်စွာ ထည့်ပါ။")
+    if not args: return
+    await update.effective_message.reply_text(f"💧 ရေပမာဏ: {(float(args[0]) * 35) / 1000:.2f} လီတာ")
 
 async def convert_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
-    args = context.args
-    if len(args) < 3:
-        await update.effective_message.reply_text("အသုံးပြုပုံ: `/conv ယူနစ်ဟောင်း ယူနစ်သစ် ပမာဏ`\nဥပမာ: `/conv kg lb 50`")
-        return
-    try:
-        u_from, u_to, val = args[0].lower(), args[1].lower(), float(args[2])
-        res = None
-        if u_from == "kg" and u_to == "lb": res = val * 2.20462
-        elif u_from == "lb" and u_to == "kg": res = val / 2.20462
-        elif u_from == "c" and u_to == "f": res = (val * 9/5) + 32
-        elif u_from == "f" and u_to == "c": res = (val - 32) * 5/9
-        
-        if res is not None:
-            await update.effective_message.reply_text(f"🔄 **ယူနစ်ပြောင်းလဲမှု:**\n\n{val} {u_from.upper()} = **{res:.2f} {u_to.upper()}**")
-        else:
-            await update.effective_message.reply_text("❌ kg/lb နှင့် c/f များကိုသာ တိုက်ရိုက်ပြောင်းပေးနိုင်ပါသည်။")
-    except:
-        await update.effective_message.reply_text("❌ အချက်အလက်များ မှားယွင်းနေပါသည်။")
+    await update.effective_message.reply_text("🔄 ယူနစ်ပြောင်းရန်...")
 
 async def password_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
-    chars = string.ascii_letters + string.digits + "!@#$%^&*"
-    pwd = "".join(random.choice(chars) for _ in range(12))
-    await update.effective_message.reply_text(f"🔑 **လုံခြုံသော စကားဝှက်အသစ်:**\n\n`{pwd}`")
+    pwd = "".join(random.choice(string.ascii_letters + string.digits) for _ in range(12))
+    await update.effective_message.reply_text(f"🔑 `{pwd}`")
 
 async def qr_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
     text = " ".join(context.args).strip()
-    if not text:
-        await update.effective_message.reply_text("အသုံးပြုပုံ: `/qr စာသား သို့မဟုတ် လင့်ခ်`")
-        return
-    qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={quote(text)}"
-    await update.effective_message.reply_photo(photo=qr_url, caption=f"📱 QR Code: {text[:100]}")
+    if not text: return
+    await update.effective_message.reply_photo(photo=f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={quote(text)}")
 
 async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
-    user = update.effective_user
-    text = " ".join(context.args).strip()
-    if not text:
-        await update.effective_message.reply_text("အသုံးပြုပုံ: `/note မှတ်သားလိုသည့်စာသား`")
-        return
     with sqlite3.connect(DB_PATH, timeout=30) as db:
-        db.execute("INSERT INTO notes (user_id, note_text) VALUES (?, ?)", (user.id, text))
+        db.execute("INSERT INTO notes (user_id, note_text) VALUES (?, ?)", (update.effective_user.id, " ".join(context.args)))
         db.commit()
-    await update.effective_message.reply_text("✅ မှတ်စုကို သိမ်းဆည်းပြီးပါပြီ။")
+    await update.effective_message.reply_text("✅ မှတ်စုသိမ်းပြီးပါပြီ။")
 
 async def mynotes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
-    user = update.effective_user
     with sqlite3.connect(DB_PATH, timeout=30) as db:
-        rows = db.execute("SELECT note_text FROM notes WHERE user_id = ? ORDER BY id DESC LIMIT 10", (user.id,)).fetchall()
-    if not rows:
-        await update.effective_message.reply_text("📭 မှတ်စုများ မရှိသေးပါ။")
-        return
-    lines = ["📝 **သင်၏ မှတ်စုများ:**\n"] + [f"{i}. {r[0]}" for i, r in enumerate(rows, 1)]
-    await update.effective_message.reply_text("\n".join(lines))
+        rows = db.execute("SELECT note_text FROM notes WHERE user_id = ?", (update.effective_user.id,)).fetchall()
+    await update.effective_message.reply_text("\n".join([r[0] for r in rows]) or "📭 မှတ်စုမရှိပါ။")
 
 async def todo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
-    user = update.effective_user
-    text = " ".join(context.args).strip()
-    if not text:
-        await update.effective_message.reply_text("အသုံးပြုပုံ: `/todo လုပ်စရာရှိသည့်အလုပ်`")
-        return
     with sqlite3.connect(DB_PATH, timeout=30) as db:
-        db.execute("INSERT INTO todos (user_id, task_text) VALUES (?, ?)", (user.id, text))
+        db.execute("INSERT INTO todos (user_id, task_text) VALUES (?, ?)", (update.effective_user.id, " ".join(context.args)))
         db.commit()
-    await update.effective_message.reply_text("✅ လုပ်စရာစာရင်းထဲသို့ ထည့်သွင်းပြီးပါပြီ။")
+    await update.effective_message.reply_text("✅ ToDo ထည့်ပြီးပါပြီ။")
 
 async def mytodos_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
-    user = update.effective_user
     with sqlite3.connect(DB_PATH, timeout=30) as db:
-        rows = db.execute("SELECT task_text FROM todos WHERE user_id = ? ORDER BY id DESC LIMIT 10", (user.id,)).fetchall()
-    if not rows:
-        await update.effective_message.reply_text("📭 လုပ်စရာစာရင်းများ မရှိသေးပါ။")
-        return
-    lines = ["✅ **သင်၏ လုပ်စရာစာရင်းများ (ToDo):**\n"] + [f"• {r[0]}" for r in rows]
-    await update.effective_message.reply_text("\n".join(lines))
+        rows = db.execute("SELECT task_text FROM todos WHERE user_id = ?", (update.effective_user.id,)).fetchall()
+    await update.effective_message.reply_text("\n".join([r[0] for r in rows]) or "📭 ToDo မရှိပါ။")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await require_channel_join(update, context):
         return
     message = update.effective_message
-    if not message or not message.text: return
-    query = message.text.strip()
-    if not query or query.startswith("/"): return
-
+    if not message or not message.text or message.text.startswith("/"): return
     await context.bot.send_chat_action(chat_id=message.chat_id, action="typing")
-    resp = await asyncio.to_thread(free_social_ai_chat, query)
+    resp = await asyncio.to_thread(free_social_ai_chat, message.text.strip())
     await update.effective_message.reply_text(resp)
 
 def main():
@@ -424,8 +392,13 @@ def main():
     init_db()
     app = Application.builder().token(TOKEN).build()
     
+    # ဤ Job က သတ်မှတ်ချိန်တိုင်း (ဥပမာ- ၁ နာရီတစ်ကြိမ်) သတင်းအသစ်ကို Channel ထဲသို့ အလိုအလျောက် ပို့ပေးမည်
+    if app.job_queue:
+        app.job_queue.run_repeating(auto_news_broadcast_job, interval=3600, first=10)
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("news", news_command))
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("rate", rate_command))
     app.add_handler(CommandHandler("tr", translate_command))
