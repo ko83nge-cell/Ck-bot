@@ -1,7 +1,7 @@
-python-telegram-bot>=20.8,<23.0
 requests>=2.31,<3.0
 tzdata>=2024.1
 pyrogram==2.0.106
-tgcrypto>=1.2.5
-py-tgcalls==0.9.7
-yt-dlp>=2025.10.22
+tgcrypto==1.2.5
+py-tgcalls==0.0.7
+yt-dlp==2025.10.22
+
