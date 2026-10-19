@@ -2,5 +2,5 @@ requests>=2.31,<3.0
 tzdata>=2024.1
 pyrogram==2.0.106
 tgcrypto
-py-tgcalls
+py-tgcalls==1.4.1
 yt-dlp==2025.10.22
