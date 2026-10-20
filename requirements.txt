@@ -1,7 +1,0 @@
-python-telegram-bot
-requests
-tzdata
-pyrogram
-tgcrypto
-py-tgcalls
-yt-dlp
