@@ -10,8 +10,9 @@ from telegram.ext import (
     filters,
 )
 
-TOKEN = os.getenv("TELEGRAM_TOKEN")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
+# ရာသီခွင် အချက်အလက်များ (ပုံသေမဟုတ်ဘဲ အမြဲအသစ်ဖြစ်စေမည့် Pool များ)
 ZODIAC_NAMES = {
     "aries": "မိဿရာသီ (Aries)",
     "taurus": "ပြိဿရာသီ (Taurus)",
@@ -24,33 +25,22 @@ ZODIAC_NAMES = {
     "sagittarius": "ဓနုရာသီ (Sagittarius)",
     "capricorn": "မကာရရာသီ (Capricorn)",
     "aquarius": "ကုမ်ရာသီ (Aquarius)",
-    "pisces": "မိန်းရာသီ (Pisces)",
+    "pisces": "မိန်ရာသီ (Pisces)",
 }
 
-# မနက်ဖြန်အတွက် ပုံသေမဟုတ်ဘဲ ပုံစံအမျိုးမျိုး ပြောင်းလဲထွက်ပေါ်လာမယ့် ဟောကိန်း အစိတ်အပိုင်းများ
-TOMORROW_PREFIXES = [
-    "မနက်ဖြန်မှာ သင့်ရဲ့ ကံကြမ္မာက",
-    "ရှေ့လာမယ့် မနက်ဖြန်ရက်မှာတော့",
-    "သင့်အတွက် မနက်ဖြန် တစ်နေ့တာဟာ",
-    "မနက်ဖြန်ရောက်လာရင် သင့်ဘဝထဲမှာ",
+TOMORROW_EVENTS = [
+    "မမျှော်လင့်ထားတဲ့ ငွေကြေးဝင်ရောက်မှု သို့မဟုတ် အကျိုးအမြတ်အသစ်တွေ ကိုယ့်ဆီ ရောက်လာပါလိမ့်မယ်။",
+    "လုပ်ငန်းခွင် သို့မဟုတ် ပညာရေးမှာ ကိုယ့်ရဲ့ ကြိုးစားအားထုတ်မှုကို လူကြီးတွေက အသိအမှတ်ပြုလာမယ့် နေ့တစ်နေ့ ဖြစ်ပါတယ်။",
+    "ရှုပ်ထွေးနေတဲ့ ပြဿနာဟောင်းတစ်ခုကို မိတ်ဆွေကောင်းတွေရဲ့ အကူအညီနဲ့ အလွယ်တကူ ဖြေရှင်းနိုင်သွားပါမယ်။",
+    "ခရီးသွားလာရမည့် ကိစ္စများ ကြုံရနိုင်ပြီး၊ သွားရာလမ်းမှာ အကျိုးအမြတ်နဲ့ မိတ်ဆွေသစ်တွေ တိုးပွားလာပါလိမ့်မယ်။",
 ]
 
-TOMORROW_ACTIONS = [
-    "မမျှော်လင့်ထားတဲ့ ငွေကြေးဝင်ရောက်မှုတွေနဲ့အတူ အလုပ်ကိစ္စတွေ အထူးတလည် အဆင်ပြေသွားပါမယ်။",
-    "လူမျိုးရေး၊ မိတ်ဆွေအသိုင်းအဝိုင်းနဲ့ လုပ်ငန်းခွင်တို့မှာ အပြောင်းအလဲကောင်းတွေ ကြုံတွေ့ရပါလိမ့်မယ်။",
-    "ရှုပ်ထွေးနေတဲ့ ပြဿနာဟောင်းတစ်ခုကို ကိုယ့်ရဲ့ ဉာဏ်စွမ်းနဲ့ အလွယ်တကူ ဖြေရှင်းနိုင်သွားမယ့် အချိန်ဖြစ်ပါတယ်။",
-    "ခရီးသွားလာရမည့် ကိစ္စများပေါ်ပေါက်လာနိုင်ပြီး သွားရာလမ်းမှာ အကျိုးအမြတ်နဲ့ မိတ်ဆွေကောင်းတွေ တိုးပွားပါမယ်။",
-    "ကိုယ့်ရဲ့ ကြိုးစားအားထုတ်မှုအတွက် ထိုက်တန်တဲ့ ဂုဏ်ပြုမှုနဲ့ အသိအမှတ်ပြုခြင်းကို ခံရမယ့် နေ့တစ်နေ့ပါ။",
+TOMORROW_AVOIDS = [
+    "စကားပြောဆိုရာမှာ အလောတကြီး ဆုံးဖြတ်ပြောဆိုမိခြင်းနဲ့ အထင်အမြင်လွဲမှားမှုများကို အထူးသတိပြုပါ။",
+    "အရေးကြီးတဲ့ ဆုံးဖြတ်ချက်တွေ ချမှတ်တဲ့အခါ သူတစ်ပါးရဲ့ စကားကို အလွယ်တကူ မယုံကြည်ဘဲ ကိုယ်တိုင်သေချာ စဉ်းစားပါ။",
+    "ငွေကြေးသုံးစွဲမှုအပိုင်းမှာ မလိုအပ်ဘဲ လက်လွန်စရာတွေ ဖြစ်ပေါ်တတ်လို့ စဉ်းစားချင့်ချိန်ပြီး သုံးစွဲပါ။",
 ]
 
-TOMORROW_CAUTIONS = [
-    "သို့သော် စကားပြောဆိုတဲ့အခါ အလောတကြီး မဆင်မခြင် ဖြစ်တတ်တာကို အထူးသတိပြုသင့်ပါတယ်။",
-    "အရေးကြီးတဲ့ ဆုံးဖြတ်ချက်တွေ ချတဲ့အခါ သူတစ်ပါးစကားကို အလွယ်တကူ မယုံကြည်ဖို့ လိုပါတယ်။",
-    "ငွေကြေးသုံးစွဲမှုအပိုင်းမှာ လက်လွန်စရာတွေ ဖြစ်ပေါ်တတ်လို့ တတ်နိုင်သမျှ ချင့်ချိန်သုံးစွဲပါ။",
-    "စိတ်ဖိစီးမှုတွေ များလာနိုင်တဲ့အတွက် ကိုယ့်ရဲ့ ကျန်းမာရေးနဲ့ အနားယူချိန်ကို မေ့လျော့မနေပါနဲ့။",
-]
-
-# ရာသီခွင် အသေးစိတ်အတွက် အမျိုးစုံပြောင်းလဲမည့် အစိတ်အပိုင်းများ
 TRAITS_POOL = [
     "ခေါင်းဆောင်မှု အပြည့်အဝရှိပြီး ကိုယ်ပိုင်ဆုံးဖြတ်ချက် ခိုင်မာသူ ဖြစ်ပါတယ်။",
     "အရာရာကို လက်တွေ့ကျကျနဲ့ စနစ်တကျ ဦးဆောင်လုပ်ကိုင်တတ်တဲ့ သဘာဝရှိပါတယ်။",
@@ -67,7 +57,7 @@ LOVE_POOL = [
 CAREER_POOL = [
     "လုပ်ငန်းခွင်နဲ့ စီးပွားရေးမှာ ကိုယ်ပိုင်ဖန်တီးမှုအသစ်တွေနဲ့ ထိပ်ဆုံးကို ရောက်ရှိနိုင်ပါတယ်။",
     "ငွေကြေးစီမံခန့်ခွဲမှုနဲ့ ရင်းနှီးမြှုပ်နှံမှုတွေမှာ အထူးကံကောင်းမယ့် အချိန်ဖြစ်ပါတယ်။",
-    "အဖွဲ့အစည်းဆိုင်ရာ တာဝန်တွေနဲ့ ဦးဆောင်ရမယ့်နေရာတွေမှာ အောင်မြင်မှု ရရှိပါမယ်။",
+    "အဖွဲ့အစည်းဆိုင်ရာ တာဝန်တွေနဲ့ ဦးဆောင်ရမည့်နေရာတွေမှာ အောင်မြင်မှု ရရှိပါမယ်။",
 ]
 
 TAROT_DECK = [
@@ -81,6 +71,25 @@ TAROT_DECK = [
     {"name": "The Star (ကြယ်ပွင့်)", "vibe": "မျှော်လင့်ချက်အသစ်များ ပေါ်ပေါက်လာခြင်း၊ စိတ်နှလုံး အေးချမ်းခြင်း"},
 ]
 
+# ဉာဏ်စမ်းမေးခွန်းများ
+TRIVIA_QUESTIONS = [
+    {
+        "q": "မြန်မာနိုင်ငံ၏ အမြင့်ဆုံးတောင်ထိပ်မှာ အမည်မှာ အဘယ်နည်း?",
+        "options": ["ခါကာဘိုရာဇီ", "ဇွဲကပင်", "ပုပ္ပား", "တောင်ကြီး"],
+        "answer": 0,
+    },
+    {
+        "q": "နေအဖွဲ့အစည်းတွင် နေနှင့် အနီးဆုံးဂြိုဟ်မှာ အဘယ်နည်း?",
+        "options": ["အင်္ဂါဂြိုဟ်", "ဗုဒ္ဓဟူးဂြိုဟ်", "ကြာသပတေးဂြိုဟ်", "စနေဂြိုဟ်"],
+        "answer": 1,
+    },
+    {
+        "q": "လူ့ခန္ဓာကိုယ်တွင် အကြီးဆုံး အင်္ဂါအစိတ်အပိုင်းမှာ မည်သည်နည်း?",
+        "options": ["နှလုံး", "အသည်း", "အရေပြား", "အဆုတ်"],
+        "answer": 2,
+    },
+]
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -90,14 +99,44 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "မင်္ဂလာပါရှင့်/ခဗျာ 🙏\n\nကျေးဇူးပြု၍ အောက်ပါတို့မှ လိုချင်သော ဟောကိန်းအမျိုးအစား ခလုတ်ကို ရွေးချယ်ပါ -",
+        "မင်္ဂလာပါရှင့်/ခဗျာ 🙏\n\nဤဘော့တ်မှတဆင့် ဗေဒင်၊ တားရော့နှင့် ဂရုများတွင် ဉာဏ်စမ်းဂိမ်း (`/game`) ဆော့ကစားနိုင်ပါသည်။ အောက်ပါတို့မှ ရွေးချယ်ပါ -",
         reply_markup=reply_markup,
     )
+
+
+# /game Command ဖြင့် အဖွဲ့သား ၃ ယောက် လိုအပ်ကြောင်း ကြေညာကာ ဉာဏ်စမ်းစတင်ခြင်း
+async def game_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q_data = random.choice(TRIVIA_QUESTIONS)
+    # ဖြေဆိုရန် ခလုတ်များ တည်ဆောက်ခြင်း
+    keyboard = []
+    for idx, opt in enumerate(q_data["options"]):
+        keyboard.append([InlineKeyboardButton(opt, callback_data=f"ans_{idx}_{q_data['answer']}")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    game_intro = (
+        "🎮 **ဉာဏ်စမ်း အဖွဲ့လိုက်ဂိမ်း စတင်ပါပြီ** 🎮\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "⚠️ *စည်းမျဉ်း:* ဤဂိမ်းတွင် ပါဝင်ရန် **အဖွဲ့သား (၃) ယောက်** လိုအပ်ပါသည်။\n\n"
+        f"❓ **မေးခွန်း:** {q_data['q']}"
+    )
+    await update.message.reply_text(game_intro, parse_mode="Markdown", reply_markup=reply_markup)
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    data = query.data
+    if data.startswith("ans_"):
+        _, selected_idx, correct_idx = data.split("_")
+        if selected_idx == correct_idx:
+            result_text = "🎉 **ဂုဏ်ယူပါတယ်!** အဖွဲ့သားများ စုပေါင်းဖြေဆိုချက်မှာ **မှန်ကန်ပါသည်**။ 🏆"
+        else:
+            result_text = "❌ **မှားယွင်းနေပါတယ်!** နောက်တစ်ကြိမ် ထပ်မံကြိုးစားကြည့်ပါ။ (/game ဖြင့် အသစ်စတင်နိုင်သည်)"
+        
+        await query.edit_message_text(result_text, parse_mode="Markdown")
+        return
 
     if query.data == "mode_zodiac":
         context.user_data["mode"] = "zodiac"
@@ -178,16 +217,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     zodiac_title = ZODIAC_NAMES[matched_key]
 
-    # **Dynamic Randomizer:** တစ်ခါတောင်းဆိုတိုင်း စာသားအသစ်တွေ အလိုအလျောက် ရောစပ်ထုတ်ပေးခြင်း
     if current_mode == "tomorrow":
-        dynamic_event = f"{random.choice(TOMORROW_PREFIXES)} {random.choice(TOMORROW_ACTIONS)}"
-        dynamic_avoid = random.choice(TOMORROW_CAUTIONS)
+        event_text = random.choice(TOMORROW_EVENTS)
+        avoid_text = random.choice(TOMORROW_AVOIDS)
         response = (
             f"📅 **မနက်ဖြန်အတွက် သင့်ရဲ့ ဟောကိန်းအထူး**\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"✨ **ရာသီခွင်:** {zodiac_title}\n\n"
-            f"🌟 **မနက်ဖြန် ဖြစ်ပျက်မည့်အခြေအနေ:**\n• {dynamic_event}\n\n"
-            f"⚠️ **မနက်ဖြန် သတိပြုရှောင်ရှားရမည့်အချက်:**\n• {dynamic_avoid}"
+            f"🌟 **မနက်ဖြန် ဖြစ်ပျက်မည့်အခြေအနေ:**\n• {event_text}\n\n"
+            f"⚠️ **မနက်ဖြန် သတိပြုရှောင်ရှားရမည့်အချက်:**\n• {avoid_text}"
         )
     else:
         trait_text = random.choice(TRAITS_POOL)
@@ -214,10 +252,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("game", game_command))  # /game command ထည့်သွင်းခြင်း
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    print("Bot is running...")
+    print("Bot with Group Game is running...")
     app.run_polling()
+
