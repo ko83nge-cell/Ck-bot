@@ -1,1 +1,3 @@
-python-telegram-bot==21.10\nhttpx==0.28.1\n
+python-telegram-bot==20.8
+python-dotenv==1.0.1
+
