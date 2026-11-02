@@ -12,7 +12,7 @@ from telegram.ext import (
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# ရာသီခွင် အမည်များ
+# ရာသီခွင် အမည်များနှင့် အဓိပ္ပာယ်များ
 ZODIAC_NAMES = {
     "aries": "မိဿရာသီ (Aries)",
     "taurus": "ပြိဿရာသီ (Taurus)",
@@ -24,39 +24,32 @@ ZODIAC_NAMES = {
     "scorpio": "ဗြိစ္ဆာရာသီ (Scorpio)",
     "sagittarius": "ဓနုရာသီ (Sagittarius)",
     "capricorn": "မကာရရာသီ (Capricorn)",
-    "aquarius": "ကုမ်ရာသီ (Aquarius)",
+    "aquarius": "ကုမ်ရာသီ (Capricorn)",
     "pisces": "မိန်ရာသီ (Pisces)",
 }
 
-# မနက်ဖြန် ဟောကိန်း အသေးစိတ် အစိတ်အပိုင်းများ
 TOMORROW_EVENTS = [
     "မမျှော်လင့်ထားတဲ့ ငွေကြေးဝင်ရောက်မှု သို့မဟုတ် အကျိုးအမြတ်အသစ်တွေ ကိုယ့်ဆီ ရောက်လာပါလိမ့်မယ်။ လုပ်ကိုင်နေတဲ့ လုပ်ငန်းတွေမှာလည်း ထင်မှတ်မထားတဲ့ အောင်မြင်မှုတွေနဲ့ ကြုံတွေ့ရနိုင်ပါတယ်။",
     "လုပ်ငန်းခွင် သို့မဟုတ် ပညာရေးမှာ ကိုယ့်ရဲ့ ကြိုးစားအားထုတ်မှုကို အထက်လူကြီးများက အသိအမှတ်ပြုလာမယ့် နေ့တစ်နေ့ ဖြစ်ပါတယ်။ မိတ်ဆွေသစ်တွေနဲ့လည်း ဆက်ဆံရေး အထူးကောင်းမွန်နေပါတယ်။",
     "ရှုပ်ထွေးနေတဲ့ ပြဿနာဟောင်းတစ်ခုကို မိတ်ဆွေကောင်းတွေရဲ့ အကူအညီနဲ့ အလွယ်တကူ ဖြေရှင်းနိုင်သွားပါမယ်။ စိတ်နှလုံး အေးချမ်းရမယ့် ရက်ကောင်းတစ်ရက် ဖြစ်ပါတယ်။",
-    "ခရီးသွားလာရမည့် ကိစ္စများ ကြုံရနိုင်ပြီး၊ သွားရာလမ်းမှာ အကျိုးအမြတ်နဲ့ လုပ်ငန်းဆိုင်ရာ အခွင့်အလမ်းကောင်းများ တိုးပွားလာပါလိမ့်မယ်။",
 ]
 
 TOMORROW_AVOIDS = [
     "စကားပြောဆိုရာမှာ အလောတကြီး ဆုံးဖြတ်ပြောဆိုမိခြင်းနဲ့ အထင်အမြင်လွဲမှားမှုများကို အထူးသတိပြုပါ။ ကိုယ့်ရဲ့ စိတ်ခံစားချက်ကို ထိန်းချုပ်ဖို့ လိုအပ်ပါတယ်။",
     "အရေးကြီးတဲ့ ဆုံးဖြတ်ချက်တွေ ချမှတ်တဲ့အခါ သူတစ်ပါးရဲ့ စကားကို အလွယ်တကူ မယုံကြည်ဘဲ ကိုယ်တိုင်သေချာ စဉ်းစားသုံးသပ်ပါ။",
-    "ငွေကြေးသုံးစွဲမှုအပိုင်းမှာ မလိုအပ်ဘဲ လက်လွန်စရာတွေ ဖြစ်ပေါ်တတ်လို့ စဉ်းစားချင့်ချိန်ပြီးမှ သုံးစွဲသင့်ပါတယ်။",
 ]
 
-# ရာသီခွင် အသေးစိတ် ကဏ္ဍအလိုက် အချက်အလက်များ
 TRAITS_POOL = [
     "ခေါင်းဆောင်မှု အပြည့်အဝရှိပြီး ကိုယ်ပိုင်ဆုံးဖြတ်ချက် ခိုင်မာသူ ဖြစ်ပါတယ်။ အခက်အခဲတွေကို ရဲရဲဝံ့ဝံ့ ရင်ဆိုင်ကျော်ဖြတ်တတ်တဲ့ စိတ်ဓာတ်ရှိပါတယ်။",
     "အရာရာကို လက်တွေ့ကျကျနဲ့ စနစ်တကျ ဦးဆောင်လုပ်ကိုင်တတ်တဲ့ သဘာဝရှိပါတယ်။ တာဝန်ယူမှု တာဝန်ခံမှု အပြည့်အဝ ရှိသူ ဖြစ်ပါတယ်။",
-    "ဉာဏ်ပညာထက်မြက်ပြီး ပတ်ဝန်းကျင်အသစ်နဲ့ လွယ်ကူစွာ သင့်မြတ်အောင် နေထိုင်နိုင်ပါတယ်။ တီထွင်ဖန်တီးနိုင်စွမ်း အလွန်အားကောင်းပါတယ်။",
 ]
 
 LOVE_POOL = [
     "အချစ်ရေးမှာ တဖက်လူအပေါ် အလွန်ဂရုစိုက်ပေးတတ်ပေမယ့် တစ်ခါတရံ မာနကိုတော့ လျှော့ချသင့်ပါတယ်။ နားလည်မှုအပြည့်နဲ့ တည်ဆောက်ရမယ့် ကာလဖြစ်ပါတယ်။",
-    "ရင်ခုန်စရာ အချစ်ဇာတ်လမ်းတွေနဲ့ သစ္စာရှိမှုကို အပြန်အလှန် ဖလှယ်ရမယ့် ကာလကောင်း ဖြစ်ပါတယ်။ အိမ်ထောင်ရေး သို့မဟုတ် အချစ်ရေး သာယာနေပါမယ်။",
 ]
 
 CAREER_POOL = [
     "လုပ်ငန်းခွင်နဲ့ စီးပွားရေးမှာ ကိုယ်ပိုင်ဖန်တီးမှုအသစ်တွေနဲ့ ထိပ်ဆုံးကို ရောက်ရှိနိုင်ပါတယ်။ လုပ်ငန်းတိုးချဲ့မှုတွေအတွက် အကောင်းဆုံး အချိန်အခါ ဖြစ်ပါတယ်။",
-    "ငွေကြေးစီမံခန့်ခွဲမှုနဲ့ ရင်းနှီးမြှုပ်နှံမှုတွေမှာ အထူးကံကောင်းမယ့် အချိန်ဖြစ်ပါတယ်။ အလုပ်သစ် ရှာဖွေနေသူများလည်း အခွင့်အလမ်းကောင်းများ ရရှိပါမယ်။",
 ]
 
 TAROT_DECK = [
@@ -65,12 +58,26 @@ TAROT_DECK = [
     {"name": "The High Priestess (ပုရောဟိတ်မ)", "vibe": "အတွင်းစိတ်အသိကို နားထောင်ရန်နှင့် သည်းခံရန် အချိန်"},
 ]
 
+# မေးခွန်းများနှင့် အဖြေများ သိမ်းဆည်းရန် စာရင်း
 SAVED_TRIVIA_QUESTIONS = [
     {
         "q": "မြန်မာနိုင်ငံ၏ အမြင့်ဆုံးတောင်ထိပ်မှာ အမည်မှာ အဘယ်နည်း?",
         "options": ["ခါကာဘိုရာဇီ", "ဇွဲကပင်", "ပုပ္ပား", "တောင်ကြီး"],
         "answer": 0,
     },
+    {
+        "q": "နေအဖွဲ့အစည်းတွင် နေနှင့် အနီးဆုံးဂြိုဟ်မှာ အဘယ်နည်း?",
+        "options": ["အင်္ဂါဂြိုဟ်", "ဗုဒ္ဓဟူးဂြိုဟ်", "ကြာသပတေးဂြိုဟ်", "စနေဂြိုဟ်"],
+        "answer": 1,
+    },
+]
+
+# ကံစမ်းမဲဂိမ်းအတွက် ဆုလာဘ်များ
+LUCKY_PRIZES = [
+    "🎉 ဂုဏ်ယူပါတယ်! ယနေ့ သင်၏ ကံကောင်းခြင်း လက်ဆောင်မှာ **'ထီပေါက်ကံစမ်းခြင်း အထူးကောင်းမွန်ခြင်း'** ဖြစ်ပါသည်။",
+    "✨ ဝမ်းသာစရာပါ! သင်သည် ယနေ့တွင် **'မေတ္တာရေးရာ အံ့အားသင့်စရာ ကံကောင်းမှု'** ကို ပိုင်ဆိုင်ရပါမည်။",
+    "💰 ရွှေလိုမိုးလို ကျမည့်နေ့ပါ! **'ငွေကြေးဝင်ရောက်မည့်ကံ'** အထူးတလည် တောက်ပနေပါသည်။",
+    "🌟 စိတ်ချမ်းသာမှုနှင့်အတူ **'ခရီးသွားလာရမည့်အခွင့်အလမ်းကောင်း'** များ ပေါ်ပေါက်လာပါမည်။",
 ]
 
 
@@ -79,11 +86,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🌟 ရာသီခွင် အသေးစိတ်ဟောကိန်း", callback_data="mode_zodiac")],
         [InlineKeyboardButton("📅 မနက်ဖြန် ဖြစ်ပျက်မည့်ဟောကိန်း", callback_data="mode_tomorrow")],
         [InlineKeyboardButton("🃏 တားရော့ (၃) ကတ် ဟောရန်", callback_data="mode_tarot")],
+        [InlineKeyboardButton("🎮 ဂိမ်းများ ဆော့ကစားရန် (/game)", callback_data="menu_games")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "မင်္ဂလာပါရှင့်/ခဗျာ 🙏\n\n- ဗေဒင်/တားရော့ မေးရန် အောက်ပါခလုတ်များကို နှိပ်ပါ။\n- ဉာဏ်စမ်းဂိမ်းဆော့ရန် ဂရုထဲတွင် `/game` ဟု ရိုက်ပါ။\n- မေးခွန်းအသစ်ထည့်ရန် `/addq` ဟု အသုံးပြုပါ။",
+        "မင်္ဂလာပါရှင့်/ခဗျာ 🙏\n\n"
+        "ဤဘော့တ်မှတဆင့် ဗေဒင်ဟောကိန်းများ၊ တားရော့နှင့် ဂရုများတွင် ဂိမ်းများ ဆော့ကစားနိုင်ပါသည်။\n"
+        "မေးခွန်းအသစ်ထည့်ရန် `/addq` ကို အသုံးပြုပါ။",
         reply_markup=reply_markup,
+    )
+
+
+# /game Command ဖြင့် ဂိမ်းအမျိုးအစား ရွေးချယ်စရာ မီနူးပြသခြင်း
+async def game_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("🧠 အဖွဲ့လိုက် ဉာဏ်စမ်းဂိမ်း (Trivia)", callback_data="game_trivia")],
+        [InlineKeyboardButton("🎁 ကံစမ်းမဲ ကံကောင်းခြင်းဂိမ်း", callback_data="game_lucky")],
+        [InlineKeyboardButton("🏠 ပင်မမီနူးသို့", callback_data="menu_start")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "🎮 **ဂိမ်းကစားရန် ရွေးချယ်စရာများ** 🎮\n"
+        "━━━━━━━━━━━━━━━━━━━\n"
+        "ကျေးဇူးပြု၍ အောက်ပါတို့မှ ကြိုက်နှစ်သက်ရာ ဂိမ်းအမျိုးအစားကို ရွေးချယ်ပါ -",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
     )
 
 
@@ -114,55 +141,98 @@ async def add_question_command(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(f"✅ **အောင်မြင်သည်!** မေးခွန်းအသစ်ကို မှတ်သားလိုက်ပါပြီ။ စုစုပေါင်း: {len(SAVED_TRIVIA_QUESTIONS)} ခု", parse_mode="Markdown")
 
 
-async def game_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not SAVED_TRIVIA_QUESTIONS:
-        await update.message.reply_text("⚠️ မေးခွန်းမရှိသေးပါ။ `/addq` ဖြင့် အရင်ထည့်ပါ။")
-        return
-
-    q_data = random.choice(SAVED_TRIVIA_QUESTIONS)
-    keyboard = []
-    for idx, opt in enumerate(q_data["options"]):
-        keyboard.append([InlineKeyboardButton(opt, callback_data=f"ans_{idx}_{q_data['answer']}")])
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    game_intro = (
-        "🎮 **ဉာဏ်စမ်း အဖွဲ့လိုက်ဂိမ်း စတင်ပါပြီ** 🎮\n"
-        "━━━━━━━━━━━━━━━━━━━\n"
-        "⚠️ *စည်းမျဉ်း:* ဤဂိမ်းတွင် ပါဝင်ရန် **အဖွဲ့သား (၃) ယောက်** လိုအပ်ပါသည်။\n\n"
-        f"❓ **မေးခွန်း:** {q_data['q']}"
-    )
-    await update.message.reply_text(game_intro, parse_mode="Markdown", reply_markup=reply_markup)
-
-
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     data = query.data
+
+    # ဉာဏ်စမ်းမေးခွန်း အဖြေစစ်ဆေးခြင်း
     if data.startswith("ans_"):
         _, selected_idx, correct_idx = data.split("_")
         if selected_idx == correct_idx:
-            result_text = "🎉 **ဂုဏ်ယူပါတယ်!** အဖွဲ့သားများ စုပေါင်းဖြေဆိုချက်မှာ **မှန်ကန်ပါသည်**။ 🏆"
+            result_text = "🎉 **ဂုဏ်ယူပါတယ်!** အဖွဲ့သားများ စုပေါင်းဖြေဆိုချက်မှာ **မှန်ကန်ပါသည်**။ 🏆\n\nထပ်မံဆော့ရန် `/game` ဟု ရိုက်ပါ။"
         else:
-            result_text = "❌ **မှားယွင်းနေပါတယ်!** နောက်တစ်ကြိမ် ထပ်မံကြိုးစားကြည့်ပါ။"
+            result_text = "❌ **မှားယွင်းနေပါတယ်!** နောက်တစ်ကြိမ် ထပ်မံကြိုးစားကြည့်ပါ။\n\nထပ်မံဆော့ရန် `/game` ဟု ရိုက်ပါ။"
         await query.edit_message_text(result_text, parse_mode="Markdown")
         return
 
-    if query.data == "mode_zodiac":
+    # ဂိမ်းအမျိုးအစား ရွေးချယ်မှုများ
+    if data == "menu_games":
+        keyboard = [
+            [InlineKeyboardButton("🧠 အဖွဲ့လိုက် ဉာဏ်စမ်းဂိမ်း (Trivia)", callback_data="game_trivia")],
+            [InlineKeyboardButton("🎁 ကံစမ်းမဲ ကံကောင်းခြင်းဂိမ်း", callback_data="game_lucky")],
+            [InlineKeyboardButton("🏠 ပင်မမီနူးသို့", callback_data="menu_start")],
+        ]
+        await query.edit_message_text(
+            "🎮 **ဂိမ်းကစားရန် ရွေးချယ်စရာများ** 🎮\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "ကျေးဇူးပြု၍ အောက်ပါတို့မှ ကြိုက်နှစ်သက်ရာ ဂိမ်းအမျိုးအစားကို ရွေးချယ်ပါ -",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+    elif data == "game_trivia":
+        if not SAVED_TRIVIA_QUESTIONS:
+            await query.edit_message_text("⚠️ မေးခွန်းမရှိသေးပါ။ `/addq` ဖြင့် အရင်ထည့်ပါ။")
+            return
+        q_data = random.choice(SAVED_TRIVIA_QUESTIONS)
+        keyboard = []
+        for idx, opt in enumerate(q_data["options"]):
+            keyboard.append([InlineKeyboardButton(opt, callback_data=f"ans_{idx}_{q_data['answer']}")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        game_intro = (
+            "🎮 **ဉာဏ်စမ်း အဖွဲ့လိုက်ဂိမ်း စတင်ပါပြီ** 🎮\n"
+            "━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ *စည်းမျဉ်း:* ဤဂိမ်းတွင် ပါဝင်ရန် **အဖွဲ့သား (၃) ယောက်** လိုအပ်ပါသည်။\n\n"
+            f"❓ **မေးခွန်း:** {q_data['q']}"
+        )
+        await query.edit_message_text(game_intro, parse_mode="Markdown", reply_markup=reply_markup)
+    elif data == "game_lucky":
+        prize = random.choice(LUCKY_PRIZES)
+        keyboard = [
+            [
+                InlineKeyboardButton("🎲 ထပ်မံ ကံစမ်းမည်", callback_data="game_lucky"),
+                InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", callback_data="menu_games"),
+            ],
+            [InlineKeyboardButton("🏠 ပင်မမီနူးသို့", callback_data="menu_start")]
+        ]
+        lucky_text = (
+            f"🎁 **ကံစမ်းမဲ ကံကောင်းခြင်းဂိမ်း** 🎁\n"
+            f"━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{prize}"
+        )
+        await query.edit_message_text(lucky_text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    # ပုံမှန် ဟောကိန်းမီနူးများ
+    elif query.data == "mode_zodiac":
         context.user_data["mode"] = "zodiac"
         await query.edit_message_text("✨ **ရာသီခွင် အသေးစိတ် မေးမြန်းရန်**\n\nသင့်ရဲ့ ရာသီခွင်အမည်ကို Chat ထဲမှာ ပို့ပေးပါ။")
     elif query.data == "mode_tomorrow":
         context.user_data["mode"] = "tomorrow"
         await query.edit_message_text("📅 **မနက်ဖြန် ဖြစ်ပျက်မည့်ဟောကိန်း မေးမြန်းရန်**\n\nသင့်ရဲ့ ရာသီခွင်အမည်ကို Chat ထဲမှာ ပို့ပေးပါ။")
     elif query.data == "mode_tarot":
-        cards = random.sample(TAROT_DECK, 2)
-        response = f"✨ **တားရော့ ဟောကိန်း** ✨\n\n• {cards[0]['name']}: {cards[0]['vibe']}"
-        await query.edit_message_text(response, parse_mode="Markdown")
+        cards = random.sample(TAROT_DECK, 3)
+        response = (
+            f"✨ **တားရော့ ကတ် (၃) ကတ် ဟောကိန်း** ✨\n"
+            f"━━━━━━━━━━━━━━━━━━━\n\n"
+            f"1️⃣ **အတိတ်:** {cards[0]['name']} - {cards[0]['vibe']}\n\n"
+            f"2️⃣ **ပစ္စုပ္ပန်:** {cards[1]['name']} - {cards[1]['vibe']}\n\n"
+            f"3️⃣ **အနာဂတ်:** {cards[2]['name']} - {cards[2]['vibe']}"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("🔄 ထပ်မံ မဲကြည့်မည်", callback_data="mode_tarot"),
+                InlineKeyboardButton("🏠 ပင်မမီနူးသို့", callback_data="menu_start"),
+            ]
+        ]
+        await query.edit_message_text(response, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
     elif query.data == "menu_start":
         keyboard = [
             [InlineKeyboardButton("🌟 ရာသီခွင် အသေးစိတ်ဟောကိန်း", callback_data="mode_zodiac")],
             [InlineKeyboardButton("📅 မနက်ဖြန် ဖြစ်ပျက်မည့်ဟောကိန်း", callback_data="mode_tomorrow")],
             [InlineKeyboardButton("🃏 တားရော့ (၃) ကတ် ဟောရန်", callback_data="mode_tarot")],
+            [InlineKeyboardButton("🎮 ဂိမ်းများ ဆော့ကစားရန် (/game)", callback_data="menu_games")],
         ]
         await query.edit_message_text("ကျေးဇူးပြု၍ အောက်ပါတို့မှ ရွေးချယ်ပါ -", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -179,7 +249,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     zodiac_title = ZODIAC_NAMES[matched_key]
 
-    # ဟောကိန်းများ အသေးစိတ် အပြည့်အစုံ ထွက်လာစေရန် ပြင်ဆင်ထားခြင်း
     if current_mode == "tomorrow":
         event_text = random.choice(TOMORROW_EVENTS)
         avoid_text = random.choice(TOMORROW_AVOIDS)
@@ -221,6 +290,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    print("Bot with Detailed Readings is running...")
+    print("Multi-Game Astrology Bot is running...")
     app.run_polling()
-
