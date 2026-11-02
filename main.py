@@ -375,3 +375,4 @@ if __name__ == "__main__":
 
     print("Thief Game & Astrology Bot is running...")
     app.run_polling()
+
