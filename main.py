@@ -74,6 +74,7 @@ LUCKY_PRIZES = [
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ခလုတ်များကို တစ်ခုချင်းစီ (အောက်ချင်းဆင်းလျက်) စီစဉ်ထားသည်
     keyboard = [
         [InlineKeyboardButton("🌟 ရာသီခွင် အသေးစိတ်ဟောကိန်း", callback_data="mode_zodiac")],
         [InlineKeyboardButton("📅 မနက်ဖြန် ဖြစ်ပျက်မည့်ဟောကိန်း", callback_data="mode_tomorrow")],
@@ -150,7 +151,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(result_text, parse_mode="Markdown")
         return
 
-    # 🦹 သူခိုးဂိမ်း (Thief Game Logic)
+    # 🦹 သူခိုးဂိမ်း (Thief Game Logic - ခလုတ်များကို တစ်ခုချင်းစီ သီးသန့်ချထားသည်)
     if data == "thief_start":
         keyboard = [
             [InlineKeyboardButton("🚪 အိမ်နောက်ဖေး တံခါးပေါက်မှ ခိုးဝင်မည်", callback_data="thief_backdoor")],
@@ -184,7 +185,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "လန်ဘား ဒုတိယထပ်ပြတင်းပေါက်ကို တက်နေစဉ် လုံခြုံရေးခွေးကြီးက အသံကြားပြီး အော်ဟောက်လိုက်ပါတော့တယ်။ အိမ်ရှင်တွေ နိုးလာပြီး လန်ဘားကို ဖမ်းမိသွားပါပြီ!\n\n"
             "💥 **ဂိမ်းဆုံးရှုံးသွားပါပြီ (Game Over)**"
         )
-        keyboard = [[InlineKeyboardButton("🔄 ထပ်မံ ကြိုးစားမည်", callback_data="thief_start"), InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", "menu_games")]]
+        # ခလုတ်များကို တစ်ခုချင်းစီ သီးသန့်စီစဉ်ထားသည်
+        keyboard = [
+            [InlineKeyboardButton("🔄 ထပ်မံ ကြိုးစားမည်", callback_data="thief_start")],
+            [InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", callback_data="menu_games")]
+        ]
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data == "thief_frontdoor":
@@ -194,7 +199,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "ပင်မတံခါးမှာ အလိုအလျောက် အချက်ပေးစနစ် (Alarm) တပ်ဆင်ထားတာကို လန်ဘား မသိလိုက်ပါဘူး။ တံခါးဖွင့်လိုက်တာနဲ့ အလံသံတွေ မြည်လာပြီး ရဲတွေ ရောက်လာပါတော့တယ်။\n\n"
             "💥 **လန်ဘား ဖမ်းဆီးခံလိုက်ရပါပြီ (Game Over)**"
         )
-        keyboard = [[InlineKeyboardButton("🔄 ထပ်မံ ကြိုးစားမည်", callback_data="thief_start"), InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", "menu_games")]]
+        keyboard = [
+            [InlineKeyboardButton("🔄 ထပ်မံ ကြိုးစားမည်", callback_data="thief_start")],
+            [InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", callback_data="menu_games")]
+        ]
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data == "thief_livingroom":
@@ -204,7 +212,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "ရွှေပန်းအိုးကို ယူလိုက်တဲ့အချိန်မှာ အောက်ခံခုံမှာ တပ်ဆင်ထားတဲ့ အလေးချိန်အာရုံခံစနစ် (Sensor) ပွင့်သွားပြီး မီးနီတွေ လင်းလာပါတော့တယ်။ လုံခြုံရေးတွေ ဝိုင်းဖမ်းလိုက်ပါပြီ!\n\n"
             "💥 **မအောင်မြင်ပါ (Game Over)**"
         )
-        keyboard = [[InlineKeyboardButton("🔄 ထပ်မံ ကြိုးစားမည်", callback_data="thief_start"), InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", "menu_games")]]
+        keyboard = [
+            [InlineKeyboardButton("🔄 ထပ်မံ ကြိုးစားမည်", callback_data="thief_start")],
+            [InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", callback_data="menu_games")]
+        ]
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data == "thief_bedroom":
@@ -227,7 +238,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "လန်ဘားဟာ ခိုးထားတဲ့ပစ္စည်းတွေနဲ့အတူ အမိုးပေါ်ကနေ အောင်မြင်စွာ လွတ်မြောက်သွားပြီး သန်းကြွယ်သူဌေးကြီး ဖြစ်သွားပါတော့တယ်။ 🤑✨\n\n"
             "ဆော့ကစားပေး줘တဲ့အတွက် ကျေးဇူးတင်ပါတယ်!"
         )
-        keyboard = [[InlineKeyboardButton("🎮 အခြားဂိမ်းများ ဆော့မည်", "menu_games"), InlineKeyboardButton("🏠 ပင်မမီနူးသို့", "menu_start")]]
+        keyboard = [
+            [InlineKeyboardButton("🎮 အခြားဂိမ်းများ ဆော့မည်", callback_data="menu_games")],
+            [InlineKeyboardButton("🏠 ပင်မမီနူးသို့", callback_data="menu_start")]
+        ]
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data == "thief_lose":
@@ -237,7 +251,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "အောက်ထပ်မှာ လုံခြုံရေးတွေ စောင့်နေတာကို မမြင်လိုက်ရလို့ လန်ဘား တစ်ယောက် ထွက်ပြေးတဲ့လမ်းမှာ မိသွားပါတော့တယ်။\n\n"
             "💥 **မအောင်မြင်ပါ (Game Over)**"
         )
-        keyboard = [[InlineKeyboardButton("🔄 ထပ်မံ ကြိုးစားမည်", callback_data="thief_start"), InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", "menu_games")]]
+        keyboard = [
+            [InlineKeyboardButton("🔄 ထပ်မံ ကြိုးစားမည်", callback_data="thief_start")],
+            [InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", callback_data="menu_games")]
+        ]
         await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
     # ဂိမ်းအမျိုးအစား ရွေးချယ်မှု မီနူး
@@ -275,10 +292,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "game_lucky":
         prize = random.choice(LUCKY_PRIZES)
         keyboard = [
-            [
-                InlineKeyboardButton("🎲 ထပ်မံ ကံစမ်းမည်", callback_data="game_lucky"),
-                InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", callback_data="menu_games"),
-            ],
+            [InlineKeyboardButton("🎲 ထပ်မံ ကံစမ်းမည်", callback_data="game_lucky")],
+            [InlineKeyboardButton("🎮 ဂိမ်းမီနူးသို့", callback_data="menu_games")],
             [InlineKeyboardButton("🏠 ပင်မမီနူးသို့", callback_data="menu_start")]
         ]
         lucky_text = (
@@ -304,10 +319,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"• {cards[1]['name']}: {cards[1]['vibe']}"
         )
         keyboard = [
-            [
-                InlineKeyboardButton("🔄 ထပ်မံ မဲကြည့်မည်", callback_data="mode_tarot"),
-                InlineKeyboardButton("🏠 ပင်မမီနူးသို့", callback_data="menu_start"),
-            ]
+            [InlineKeyboardButton("🔄 ထပ်မံ မဲကြည့်မည်", callback_data="mode_tarot")],
+            [InlineKeyboardButton("🏠 ပင်မမီနူးသို့", callback_data="menu_start")],
         ]
         await query.edit_message_text(response, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
     elif query.data == "menu_start":
@@ -356,10 +369,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     keyboard = [
-        [
-            InlineKeyboardButton("🔄 အခြားတစ်ခု ထပ်မံမေးမည်", callback_data="menu_start"),
-            InlineKeyboardButton("🏠 ပင်မမီနူးသို့", callback_data="menu_start"),
-        ]
+        [InlineKeyboardButton("🔄 အခြားတစ်ခု ထပ်မံမေးမည်", callback_data="menu_start")],
+        [InlineKeyboardButton("🏠 ပင်မမီနူးသို့", callback_data="menu_start")],
     ]
     await update.message.reply_text(response, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -375,4 +386,3 @@ if __name__ == "__main__":
 
     print("Thief Game & Astrology Bot is running...")
     app.run_polling()
-
