@@ -16,9 +16,6 @@ from telegram.ext import (
     filters,
 )
 
-# Railway Variables:
-# TELEGRAM_TOKEN = Telegram bot token
-# DB_PATH = /data/farming_bot.db (recommended when a Railway Volume is mounted at /data)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 DB_PATH = os.getenv("DB_PATH", "farming_bot.db")
 
@@ -27,8 +24,6 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger("astrology_farming_bot")
-
-# ------------------------- EXISTING ASTROLOGY / GAME DATA -------------------------
 
 ZODIAC_NAMES = {
     "aries": "မိဿရာသီ (Aries)",
@@ -83,9 +78,6 @@ LUCKY_PRIZES = [
     "💰 ရွှေလိုမိုးလို ကျမည့်နေ့ပါ! **'ငွေကြေးဝင်ရောက်မည့်ကံ'** အထူးတလည် တောက်ပနေပါသည်။",
 ]
 
-# ------------------------- FARMING GAME CONFIG -------------------------
-
-# Grow times are deliberately short enough for a Telegram game.
 CROPS = {
     "rice": {"name": "စပါး", "seed_price": 12, "sell_price": 32, "seconds": 180, "xp": 5, "yield": (2, 4)},
     "corn": {"name": "ပြောင်း", "seed_price": 18, "sell_price": 48, "seconds": 240, "xp": 7, "yield": (2, 4)},
@@ -109,7 +101,6 @@ def db_connect():
     return conn
 
 def init_db():
-    # Ensure parent directory exists for a Railway Volume path such as /data/farming_bot.db.
     parent = os.path.dirname(DB_PATH)
     if parent:
         os.makedirs(parent, exist_ok=True)
@@ -210,7 +201,6 @@ def crop_ready(plot, now=None):
         return False
     now = now or int(time.time())
     duration = CROPS[plot["crop"]]["seconds"]
-    # Watering gives a 20% growth-time reduction.
     if plot["watered"]:
         duration = int(duration * 0.8)
     return now >= plot["planted_at"] + duration
@@ -285,9 +275,8 @@ async def farm_help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "မျိုးစေ့ဝယ် → မြေကွက်တွင်စိုက် → ရေလောင်း → ကြီးထွားချိန်စောင့် → ရိတ်သိမ်း → ရောင်းချပါ။\n"
         "ရေလောင်းထားလျှင် ကြီးထွားချိန် ၂၀% လျော့နည်းမည်။ ရောင်းရငွေဖြင့် မြေကွက်နှင့် တိရစ္ဆာန်များ တိုးချဲ့နိုင်သည်။",
         parse_mode="Markdown",
-    )
-
-async def farm_callback(query, context, data):
+               )
+                async def farm_callback(query, context, data):
     user = query.from_user
     uid = user.id
     farm = get_farm(uid, user.username or user.first_name)
@@ -536,9 +525,6 @@ async def farm_callback(query, context, data):
         )
         return
 
-
-# ------------------------- EXISTING BOT HANDLERS -------------------------
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🌟 ရာသီခွင် အသေးစိတ်ဟောကိန်း", callback_data="mode_zodiac")],
@@ -681,9 +667,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     elif data == "game_trivia":
         if not SAVED_TRIVIA_QUESTIONS:
-            await query.edit_message_text("⚠️ မေးခွန်းမရှိသေးပါ။ `/addq` ဖြင့် အရင်ထည့်ပါ。")
+            await query.edit_message_text("⚠️ မေးခွန်းမရှိသေးပါ။ `/addq` ဖြင့် အရင်ထည့်ပါ။")
             return
-        q_data = random.choice(SAVED_TRIVIA_QUESTIONS)
+     q_data = random.choice(SAVED_TRIVIA_QUESTIONS)
         keyboard = [[InlineKeyboardButton(opt, callback_data=f"ans_{idx}_{q_data['answer']}")] for idx, opt in enumerate(q_data["options"])]
         game_intro = (
             "🎮 **ဉာဏ်စမ်း အဖွဲ့လိုက်ဂိမ်း စတင်ပါပြီ** 🎮\n"
@@ -711,8 +697,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("📅 **မနက်ဖြန် ဖြစ်ပျက်မည့်ဟောကိန်း မေးမြန်းရန်**\n\nသင့်ရဲ့ ရာသီခွင်အမည်ကို Chat ထဲမှာ ပို့ပေးပါ။", parse_mode="Markdown")
     elif data == "mode_tarot":
         cards = random.sample(TAROT_DECK, 3)
-        response = "✨ **တားရော့ (၃) ကတ် ဟောကိန်း** ✨\n━━━━━━━━━━━━━━━━━━━\n\n" + "\n\n".join(
-            f"• **{card['name']}**: {card['vibe']}" for card in cards
+        response = "✨ **တားရော့ (၃) ကတ် ဟောကိန်း ✨\n━━━━━━━━━━━━━━━━━━━\n\n" + "\n\n".join(
+            f"• **: {card['vibe']}" for card in cards
         )
         keyboard = [
             [InlineKeyboardButton("🔄 ထပ်မံ မဲကြည့်မည်", callback_data="mode_tarot")],
