@@ -1,2 +1,0 @@
-python-telegram-bot[job-queue]>=20.0,<23.0
-yt-dlp
