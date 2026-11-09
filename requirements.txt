@@ -1,3 +1,4 @@
 python-telegram-bot>=21.10,<23
 yt-dlp>=2025.1.26
 gallery-dl>=1.27
+imageio-ffmpeg>=0.5.1
