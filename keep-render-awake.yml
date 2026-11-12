@@ -1,0 +1,16 @@
+name: CK BOT Render Keep Alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping-render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake CK BOT Render
+        run: |
+          curl -fsS --retry 3 --retry-delay 5 \
+            "https://ck-bot-1.onrender.com/healthz"
+          echo "CK BOT health check completed"
