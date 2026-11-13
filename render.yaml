@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ck-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    startCommand: python main.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: BOT_OWNER_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
