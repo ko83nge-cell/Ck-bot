@@ -1,0 +1,3 @@
+python-telegram-bot>=21.10,<23
+yt-dlp
+gallery-dl
